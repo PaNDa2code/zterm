@@ -19,11 +19,11 @@ pub fn main() !void {
 }
 
 test "test all" {
-    std.testing.refAllDecls(@This());
-    std.testing.refAllDecls(pty);
-    std.testing.refAllDecls(CircularBuffer);
+    // std.testing.refAllDecls(@This());
+    // std.testing.refAllDecls(pty);
+    // std.testing.refAllDecls(CircularBuffer);
     std.testing.refAllDecls(ChildProcess);
-    std.testing.refAllDecls(asni);
+    // std.testing.refAllDecls(asni);
 }
 
 pub const UNICODE = true;

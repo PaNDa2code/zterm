@@ -3,7 +3,7 @@ const win32 = @import("win32");
 const builtin = @import("builtin");
 
 const Wide = std.unicode.utf8ToUtf16LeStringLiteral;
-const WidAlloc = std.unicode.utf8ToUtf16LeAllocZ;
+const WideAlloc = std.unicode.utf8ToUtf16LeAllocZ;
 
 const posix = std.posix;
 const posix_c = @cImport({
@@ -91,7 +91,7 @@ fn startWindows(self: *ChildProcess, arina: Allocator) !void {
         startup_info_ex.lpAttributeList,
         0,
         win32thread.PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE,
-        self.pty.?.h_pesudo_console,
+        if (self.pty) |pty| pty.h_pesudo_console else null,
         @sizeOf(win32con.HPCON),
         null,
         null,
@@ -99,10 +99,16 @@ fn startWindows(self: *ChildProcess, arina: Allocator) !void {
         return error.UpdateProcThreadAttributeFailed;
     }
 
+    if (self.pty) |pty| {
+        self.stdin = .{ .handle = pty.master_write };
+        self.stdout = .{ .handle = pty.master_read };
+        self.stderr = .{ .handle = pty.master_read };
+    }
+
     var proc_info = std.mem.zeroes(win32thread.PROCESS_INFORMATION);
 
-    const path = try WidAlloc(arina, self.exe_path);
-    const cwd = if (self.cwd) |cwd_path| try WidAlloc(arina, cwd_path) else null;
+    const path = try WideAlloc(arina, self.exe_path);
+    const cwd = if (self.cwd) |cwd_path| (try WideAlloc(arina, cwd_path)).ptr else null;
 
     if (win32thread.CreateProcessW(
         path,
@@ -123,11 +129,11 @@ fn startWindows(self: *ChildProcess, arina: Allocator) !void {
 }
 
 fn terminateWindows(self: *ChildProcess) void {
-    _ = win32thread.TerminateProcess(self.process, 0);
+    _ = win32thread.TerminateProcess(self.id, 0);
 }
 
 fn waitWindows(self: *ChildProcess) !void {
-    if (win32thread.WaitForSingleObject(self.process, std.math.maxInt(u32)) != 0) {
+    if (win32thread.WaitForSingleObject(self.id, std.math.maxInt(u32)) != 0) {
         return error.WatingFailed;
     }
 }
@@ -145,6 +151,32 @@ fn startPosix(self: *ChildProcess, arina: std.mem.Allocator) !void {
 
     for (self.args, 0..) |arg, i| {
         argsZ[i] = try arina.dupeZ(u8, arg);
+    }
+
+    if (self.pty) |pty| {
+        self.stdin = .{ .handle = pty.master };
+        self.stdout = .{ .handle = pty.master };
+        self.stderr = .{ .handle = pty.master };
+    }
+
+    const fields = .{ "stdin", "stdout", "stderr" };
+    const targets = .{ "STDIN_FILENO", "STDOUT_FILENO", "STDERR_FILENO" };
+
+    inline for (fields, targets) |field, target| {
+        if (@field(self, field)) |file| {
+            const flags = try posix.fcntl(file.handle, posix.F.GETFD, 0);
+            if (flags & posix.FD_CLOEXEC != 0) {
+                _ = try posix.fcntl(
+                    file.handle,
+                    posix.F.SETFD,
+                    flags & ~@as(u32, posix.FD_CLOEXEC),
+                );
+            }
+            try posix.dup2(
+                file.handle,
+                @field(posix, target),
+            );
+        }
     }
 
     _ = posix.execveZ(pathZ, argsZ, envZ) catch null;

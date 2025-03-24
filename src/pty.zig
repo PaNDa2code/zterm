@@ -98,12 +98,6 @@ const WinPty = struct {
             return error.CreatePseudoConsoleFailed;
         }
 
-        try self.sub_process.start(
-            h_pesudo_console.?,
-            L("C:\\windows\\system32\\cmd.exe"),
-            null,
-        );
-
         self.h_pesudo_console = h_pesudo_console.?;
         self.master_write = stdin_write.?;
         self.master_read = stdout_read.?;
