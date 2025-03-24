@@ -2,11 +2,11 @@ const std = @import("std");
 const win32 = @import("win32");
 const builtin = @import("builtin");
 
-const Self = @This();
+const CircularBuffer = @This();
 
 const page_size = (if (builtin.os.tag == .windows) 64 else 8) * 1024;
 
-real_size: usize = 0,
+view_size: usize = 0,
 buffer: []u8 = undefined,
 start: usize = 0,
 len: usize = 0,
@@ -19,21 +19,29 @@ pub const CreateError = error{
     PageMappingFailed,
 };
 
-pub fn new(requsted_size: usize) !Self {
-    var self = Self{};
+pub fn new(requsted_size: usize) !CircularBuffer {
+    var self = CircularBuffer{};
     try self.init(if (requsted_size == 0) 1 else requsted_size);
     return self;
 }
 
-pub fn init(self: *Self, requsted_size: usize) CreateError!void {
-    return if (builtin.os.tag == .windows) self.init_windows(requsted_size) else self.init_posix(requsted_size);
+pub fn init(self: *CircularBuffer, requsted_size: usize) CreateError!void {
+    return switch (builtin.os.tag) {
+        .windows => self.init_windows(requsted_size),
+        .linux, .macos => self.init_posix(requsted_size),
+        else => @compileError("Target os is not supported"),
+    };
 }
 
-pub fn deinit(self: *Self) void {
-    return if (builtin.os.tag == .windows) self.deinit_windows() else self.deinit_posix();
+pub fn deinit(self: *CircularBuffer) void {
+    return switch (builtin.os.tag) {
+        .windows => self.deinit_windows(),
+        .linux, .macos => self.deinit_posix(),
+        else => @compileError("Target os is not supported"),
+    };
 }
 
-inline fn init_windows(self: *Self, requsted_size: usize) CreateError!void {
+fn init_windows(self: *CircularBuffer, requsted_size: usize) CreateError!void {
     const size = std.mem.alignForward(usize, requsted_size, 64 * 1024);
 
     const palce_holder = win32.system.memory.VirtualAlloc2(
@@ -96,7 +104,7 @@ inline fn init_windows(self: *Self, requsted_size: usize) CreateError!void {
         @ptrFromInt(@intFromPtr(palce_holder) + size),
         0,
         size,
-        .{ .REPLACE_PLACEHOLDER = 1 },
+        .{ .REPLACE_PLACEHOLDER = 0 },
         @bitCast(win32.system.memory.PAGE_READWRITE),
         null,
         0,
@@ -110,10 +118,10 @@ inline fn init_windows(self: *Self, requsted_size: usize) CreateError!void {
 
     self.buffer.ptr = @ptrCast(view1.?);
     self.buffer.len = size * 2;
-    self.real_size = size;
+    self.view_size = size;
 }
 
-inline fn init_posix(self: *Self, requsted_size: usize) CreateError!void {
+fn init_posix(self: *CircularBuffer, requsted_size: usize) CreateError!void {
     const size = std.mem.alignForward(usize, requsted_size, page_size);
 
     const place_holder = std.posix.mmap(
@@ -168,34 +176,34 @@ inline fn init_posix(self: *Self, requsted_size: usize) CreateError!void {
     errdefer std.posix.munmap(view2);
 
     self.buffer = view1.ptr[0 .. size * 2];
-    self.real_size = size;
+    self.view_size = size;
 }
 
-inline fn deinit_posix(self: *Self) void {
-    if (self.buffer.len == 0 or self.real_size == 0) return;
-    std.posix.munmap(@alignCast(self.buffer[0..self.real_size]));
-    std.posix.munmap(@alignCast(self.buffer[self.real_size..]));
+fn deinit_posix(self: *CircularBuffer) void {
+    if (self.buffer.len == 0 or self.view_size == 0) return;
+    std.posix.munmap(@alignCast(self.buffer[0..self.view_size]));
+    std.posix.munmap(@alignCast(self.buffer[self.view_size..]));
     self.buffer = &[_]u8{};
-    self.real_size = 0;
+    self.view_size = 0;
 }
 
-inline fn deinit_windows(self: *Self) void {
-    if (self.buffer.len == 0 or self.real_size == 0) return;
+fn deinit_windows(self: *CircularBuffer) void {
+    if (self.buffer.len == 0 or self.view_size == 0) return;
     _ = win32.system.memory.UnmapViewOfFile(self.buffer.ptr);
-    _ = win32.system.memory.UnmapViewOfFile(self.buffer[self.real_size..].ptr);
+    _ = win32.system.memory.UnmapViewOfFile(self.buffer[self.view_size..].ptr);
 }
 
-fn write_commit(self: *Self, bytes_count: usize) void {
+fn write_commit(self: *CircularBuffer, bytes_count: usize) void {
     self.len += bytes_count;
-    if (self.len > self.real_size) {
-        self.start = self.len - self.real_size;
-        self.len = self.real_size;
+    if (self.len > self.view_size) {
+        self.start = self.len - self.view_size;
+        self.len = self.view_size;
     }
 }
 
-pub fn write(self: *Self, buffer: []const u8) anyerror!usize {
+pub fn write(self: *CircularBuffer, buffer: []const u8) anyerror!usize {
     @setRuntimeSafety(false);
-    const bytes = @min(self.real_size, buffer.len);
+    const bytes = @min(self.view_size, buffer.len);
     const write_start = self.start + self.len;
     const write_end = write_start + bytes;
     @memcpy(self.buffer[write_start..write_end], buffer[0..bytes]);
@@ -203,29 +211,29 @@ pub fn write(self: *Self, buffer: []const u8) anyerror!usize {
     return bytes;
 }
 
-pub fn read(self: *Self, buffer: []u8) anyerror!usize {
+pub fn read(self: *CircularBuffer, buffer: []u8) anyerror!usize {
     const bytes = @min(self.len, buffer.len);
     @memcpy(buffer[0..bytes], self.buffer[self.start..]);
     return bytes;
 }
 
-pub fn getReadableSlice(self: *const Self) []const u8 {
+pub fn getReadableSlice(self: *const CircularBuffer) []const u8 {
     return self.buffer[self.start..][0..self.len];
 }
 
-const Writer = std.io.GenericWriter(*Self, anyerror, write);
-const Reader = std.io.GenericReader(*Self, anyerror, read);
+const Writer = std.io.GenericWriter(*CircularBuffer, anyerror, write);
+const Reader = std.io.GenericReader(*CircularBuffer, anyerror, read);
 
-pub fn writer(self: *Self) Writer {
+pub fn writer(self: *CircularBuffer) Writer {
     return .{ .context = self };
 }
 
-pub fn reader(self: *Self) Reader {
+pub fn reader(self: *CircularBuffer) Reader {
     return .{ .context = self };
 }
 
 test "ciruler buffer test writer" {
-    var ciruler_buffer = try Self.new(0);
+    var ciruler_buffer = try CircularBuffer.new(0);
     defer ciruler_buffer.deinit();
 
     var ciruler_buffer_writer = ciruler_buffer.writer();

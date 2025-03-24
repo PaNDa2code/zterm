@@ -2,18 +2,21 @@ const std = @import("std");
 const win32 = @import("win32");
 const builtin = @import("builtin");
 
-const Pty = @This();
+const L = std.unicode.utf8ToUtf16LeStringLiteral;
+const W = std.unicode.utf8ToUtf16LeAllocZ;
+
+const posix = std.posix;
+const win32con = win32.system.console;
+const win32fnd = win32.foundation;
+const win32pipe = win32.system.pipes;
+const win32sec = win32.security;
+const win32thread = win32.system.threading;
+const win32storeage = win32.storage;
+const win32fs = win32storeage.file_system;
+const win32mem = win32.system.memory;
 
 var pty_counter = std.atomic.Value(u32).init(0);
 const is_windows = builtin.os.tag == .windows;
-
-os_pty: if (is_windows) WinPty else PosixPty,
-id: u32,
-
-pub fn init(self: *Pty, options: PtyOptions) !void {
-    try self.os_pty.init(options);
-    self.id = pty_counter.fetchAdd(1, .acquire);
-}
 
 pub const ShellEnum = enum {
     cmd,
@@ -35,36 +38,56 @@ pub const PtyOptions = struct {
     shell: ?ShellEnum = null,
     shell_args: ?[]const u8 = null,
     async_io: bool = false,
-    height: u32 = 0,
-    width: u32 = 0,
+    size: PtySize = .{ .height = 600, .width = 800 },
 };
 
-const WinPty = struct {
-    stdin_write: std.os.windows.HANDLE,
-    stdout_read: std.os.windows.HANDLE,
-    h_pesudo_console: win32.system.console.HPCON,
+pub const PtySize = packed struct {
+    width: u16,
+    height: u16,
+};
 
-    fn isInvaliedOrNull(handle: ?std.os.windows.HANDLE) bool {
-        return handle == null or handle == std.os.windows.INVALID_HANDLE_VALUE;
+pub const Pty = if (is_windows) WinPty else PosixPty;
+
+const WinPty = struct {
+    pub const Fd = HANDLE;
+
+    const HANDLE = win32fnd.HANDLE;
+    const HPCON = win32con.HPCON;
+
+    /// child pipe sides
+    slave_read: Fd,
+    slave_write: Fd,
+
+    /// terminal pipe sides
+    master_read: Fd,
+    master_write: Fd,
+
+    h_pesudo_console: HPCON,
+
+    size: struct { height: u16, width: u16 },
+    id: u32,
+
+    fn isInvaliedOrNull(handle: ?win32fnd.HANDLE) bool {
+        return handle == null or handle == win32fnd.INVALID_HANDLE_VALUE;
     }
 
-    fn init(self: *WinPty, options: PtyOptions) !void {
-        var stdin_read: ?win32.foundation.HANDLE = undefined;
-        var stdin_write: ?win32.foundation.HANDLE = undefined;
-        var stdout_read: ?win32.foundation.HANDLE = undefined;
-        var stdout_write: ?win32.foundation.HANDLE = undefined;
-        var h_pesudo_console: ?win32.system.console.HPCON = undefined;
+    pub fn open(self: *WinPty, options: PtyOptions) !void {
+        var stdin_read: ?HANDLE = undefined;
+        var stdin_write: ?HANDLE = undefined;
+        var stdout_read: ?HANDLE = undefined;
+        var stdout_write: ?HANDLE = undefined;
+        var h_pesudo_console: ?HPCON = undefined;
 
-        if (win32.system.pipes.CreatePipe(&stdin_read, &stdin_write, null, 0) == 0 or isInvaliedOrNull(stdin_read) or isInvaliedOrNull(stdin_write)) {
+        if (win32pipe.CreatePipe(&stdin_read, &stdin_write, null, 0) == 0 or isInvaliedOrNull(stdin_read) or isInvaliedOrNull(stdin_write)) {
             return error.PipeCreationFailed;
         }
-        if (win32.system.pipes.CreatePipe(&stdout_read, &stdout_write, null, 0) == 0 or isInvaliedOrNull(stdout_read) or isInvaliedOrNull(stdout_write)) {
+        if (win32pipe.CreatePipe(&stdout_read, &stdout_write, null, 0) == 0 or isInvaliedOrNull(stdout_read) or isInvaliedOrNull(stdout_write)) {
             return error.PipeCreationFailed;
         }
 
         // Creating Pty failing can't be handled
-        const hresult = win32.system.console.CreatePseudoConsole(
-            .{ .X = @intCast(options.width), .Y = @intCast(options.height) },
+        const hresult = win32con.CreatePseudoConsole(
+            .{ .X = @intCast(options.size.width), .Y = @intCast(options.size.height) },
             stdin_read,
             stdout_write,
             0,
@@ -75,28 +98,64 @@ const WinPty = struct {
             return error.CreatePseudoConsoleFailed;
         }
 
+        try self.sub_process.start(
+            h_pesudo_console.?,
+            L("C:\\windows\\system32\\cmd.exe"),
+            null,
+        );
+
         self.h_pesudo_console = h_pesudo_console.?;
-        self.stdin_write = stdin_write.?;
-        self.stdout_read = stdout_read.?;
+        self.master_write = stdin_write.?;
+        self.master_read = stdout_read.?;
+        self.slave_write = stdout_write.?;
+        self.slave_read = stdin_read.?;
+    }
+
+    pub fn close(self: *WinPty) void {
+        // no need to terminate the sub process, closing the PTY will do.
+
+        // need to drain the communication pipes before calling ClosePseudoConsole
+        var bytes_avalable: u32 = 0;
+        var bytes_left: u32 = 0;
+        var bytes_read: u32 = 0;
+
+        while (win32pipe.PeekNamedPipe(self.master_read, null, 0, null, &bytes_avalable, &bytes_left) != 0 and bytes_avalable > 0) {
+            var buffer: [1024]u8 = undefined;
+            const to_read = @min(buffer.len, bytes_avalable);
+            _ = win32fs.ReadFile(self.master_read, &buffer, to_read, &bytes_read, null);
+        }
+
+        win32con.ClosePseudoConsole(self.h_pesudo_console);
+    }
+
+    pub fn resize(self: *WinPty, size: PtySize) !void {
+        const hresult = win32con.ResizePseudoConsole(self.h_pesudo_console, @bitCast(size));
+        if (hresult < 0) {
+            return error.PtyResizeFailed;
+        }
     }
 };
 
 const PosixPty = struct {
-    master: std.posix.fd_t,
-    slave: std.posix.fd_t,
+    pub const Fd = posix.fd_t;
 
-    inline fn init(self: *PosixPty, options: PtyOptions) !void {
-        const c = @cImport({
-            @cInclude("sys/ioctl.h");
-            @cInclude("pty.h");
-        });
+    master: Fd,
+    slave: Fd,
+    size: struct { height: u16, width: u16 },
+    id: u32,
 
+    const c = @cImport({
+        @cInclude("sys/ioctl.h");
+        @cInclude("pty.h");
+    });
+
+    pub fn open(self: *PosixPty, options: PtyOptions) !void {
         var master: c_int = undefined;
         var slave: c_int = undefined;
 
         var ws: c.winsize = .{
-            .ws_row = @intCast(options.height),
-            .ws_col = @intCast(options.width),
+            .ws_row = @intCast(options.size.height),
+            .ws_col = @intCast(options.size.width),
             .ws_xpixel = 0,
             .ws_ypixel = 0,
         };
@@ -106,19 +165,19 @@ const PosixPty = struct {
         }
 
         errdefer {
-            _ = std.posix.close(master);
-            _ = std.posix.close(slave);
+            _ = posix.close(master);
+            _ = posix.close(slave);
         }
 
         cloexec: {
-            const flags = std.posix.fcntl(master, std.posix.F.GETFD, 0) catch {
+            const flags = posix.fcntl(master, posix.F.GETFD, 0) catch {
                 break :cloexec;
             };
 
-            _ = std.posix.fcntl(
+            _ = posix.fcntl(
                 master,
-                std.posix.F.SETFD,
-                flags | std.posix.FD_CLOEXEC,
+                posix.F.SETFD,
+                flags | posix.FD_CLOEXEC,
             ) catch {
                 break :cloexec;
             };
@@ -132,12 +191,31 @@ const PosixPty = struct {
 
         self.master = master;
         self.slave = slave;
+        self.id = pty_counter.fetchAdd(1, .acquire);
+    }
+
+    pub fn close(self: *PosixPty) void {
+        posix.close(self.master);
+        posix.close(self.slave);
+    }
+
+    pub fn resize(self: *PosixPty, size: PtySize) !void {
+        const ws: c.winsize = .{
+            .ws_row = size.height,
+            .ws_col = size.width,
+            .ws_xpixel = 0,
+            .ws_ypixel = 0,
+        };
+
+        if (c.ioctl(self.master, c.TIOCSWINSZ, &ws) < 0) {
+            return error.PtyResizeFailed;
+        }
     }
 };
 
 test {
     var pty: Pty = undefined;
-    try pty.init(.{});
-
-    // std.debug.print("{any}", .{pty});
+    try pty.open(.{});
+    // closing pty will make a deadlock
+    // defer pty.close();
 }

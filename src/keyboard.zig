@@ -1,6 +1,6 @@
 const std = @import("std");
 
-const KeyState = packed struct {
+const KeyboardState = packed struct {
     keys: u32 = 0, // 256 bits (32 bytes)
 
     fn setBit(value: *u32, index: u5, is_set: bool) void {
@@ -16,25 +16,25 @@ const KeyState = packed struct {
     }
 
     /// **Set a key state (press or release)**
-    pub fn setKey(self: *KeyState, keycode: u5, is_pressed: bool) void {
+    pub fn setKey(self: *KeyboardState, keycode: u5, is_pressed: bool) void {
         setBit(&self.keys, keycode, is_pressed);
     }
 
     /// **Check if a key is currently pressed**
-    pub fn isKeyPressed(self: *const KeyState, keycode: u5) bool {
+    pub fn isKeyPressed(self: *const KeyboardState, keycode: u5) bool {
         return getBit(self.keys, keycode);
     }
 
     /// **Clear all key states (reset)**
-    pub fn clear(self: *KeyState) void {
+    pub fn clear(self: *KeyboardState) void {
         @memset(&self.keys, 0);
     }
 };
 
 pub fn main() void {
-    var keyboard = KeyState{};
+    var keyboard = KeyboardState{};
 
-    std.debug.print("size of keys array {} bytes\n", .{@sizeOf(KeyState)});
+    std.debug.print("size of keys array {} bytes\n", .{@sizeOf(KeyboardState)});
 
     // Press keys (example: 'A' = 65, 'Space' = 32)
     keyboard.setKey(1, true); // Press 'A'
