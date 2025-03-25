@@ -162,7 +162,6 @@ fn startPosix(self: *ChildProcess, arina: std.mem.Allocator) !void {
 
     const path = try findPathAlloc(arina, self.exe_path);
     const path_absolute = try std.fs.realpathAlloc(arina, path orelse self.exe_path);
-    std.debug.print("\npath_absolute = {s}\n", .{path_absolute});
     const pathZ = try arina.dupeZ(u8, path_absolute);
     const argsZ = try arina.allocSentinel(?[*:0]u8, self.args.len, null);
     for (self.args, 0..) |arg, i| {
@@ -220,6 +219,12 @@ fn findPathAlloc(allocator: Allocator, exe: []const u8) !?[]const u8 {
     const sep = std.fs.path.sep;
     const delimiter = std.fs.path.delimiter;
 
+    const exe_ext = ".exe";
+    var full_exe_name = exe;
+    if (os == .windows and !std.mem.endsWith(u8, exe, exe_ext)) {
+        full_exe_name = try std.fmt.allocPrint(allocator, "{s}.exe", .{exe});
+    }
+
     const PATH = switch (os) {
         .windows => getpathblock: {
             const win_path = std.process.getenvW(Wide("PATH")) orelse return null;
@@ -234,16 +239,10 @@ fn findPathAlloc(allocator: Allocator, exe: []const u8) !?[]const u8 {
     var it = std.mem.tokenizeScalar(u8, PATH, delimiter);
     var path_buf: [std.fs.max_path_bytes]u8 = undefined;
     while (it.next()) |search_path| {
-        const path_len = search_path.len + exe.len + 1;
-        @memcpy(path_buf[0..search_path.len], search_path);
-        path_buf[search_path.len] = sep;
-        @memcpy(path_buf[search_path.len + 1 ..][0..exe.len], exe);
-        path_buf[path_len] = 0;
-        const full_path = path_buf[0..path_len :0];
+        const full_path = try std.fmt.bufPrintZ(&path_buf, "{s}{c}{s}", .{ search_path, sep, full_exe_name });
         const file = std.fs.cwd().openFile(full_path, .{}) catch |err| {
             switch (err) {
-                error.FileNotFound => continue,
-                error.AccessDenied => continue,
+                error.FileNotFound, error.AccessDenied => continue,
                 else => {
                     return err;
                 },
@@ -276,7 +275,7 @@ test "test ChildProcess" {
     var child_stdin = child.stdin.?;
     var child_stdout = child.stdout.?;
 
-    try child_stdin.writeAll("echo HelloWorld\n");
+    try child_stdin.writeAll("echo HelloWorld\r\n");
 
     var buffer: [1024]u8 = undefined;
     _ = try child_stdout.read(&buffer);
