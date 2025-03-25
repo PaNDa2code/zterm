@@ -16,7 +16,7 @@ const win32fs = win32storeage.file_system;
 const win32mem = win32.system.memory;
 
 var pty_counter = std.atomic.Value(u32).init(0);
-const is_windows = builtin.os.tag == .windows;
+const os = builtin.os.tag;
 
 pub const ShellEnum = enum {
     cmd,
@@ -46,21 +46,19 @@ pub const PtySize = packed struct {
     height: u16,
 };
 
-pub const Pty = if (is_windows) WinPty else PosixPty;
+pub const Pty = if (os == .windows) WinPty else PosixPty;
 
 const WinPty = struct {
-    pub const Fd = HANDLE;
-
     const HANDLE = win32fnd.HANDLE;
     const HPCON = win32con.HPCON;
 
     /// child pipe sides
-    slave_read: Fd,
-    slave_write: Fd,
+    slave_read: HANDLE,
+    slave_write: HANDLE,
 
     /// terminal pipe sides
-    master_read: Fd,
-    master_write: Fd,
+    master_read: HANDLE,
+    master_write: HANDLE,
 
     h_pesudo_console: HPCON,
 
@@ -85,7 +83,6 @@ const WinPty = struct {
             return error.PipeCreationFailed;
         }
 
-        // Creating Pty failing can't be handled
         const hresult = win32con.CreatePseudoConsole(
             .{ .X = @intCast(options.size.width), .Y = @intCast(options.size.height) },
             stdin_read,
@@ -154,7 +151,7 @@ const PosixPty = struct {
             .ws_ypixel = 0,
         };
 
-        if (c.openpty(&master, &slave, null, null, &ws) < 0) {
+        if (c.openpty(&master, &slave, null, null, &ws) != 0) {
             return error.OpenPtyFailed;
         }
 
@@ -163,26 +160,6 @@ const PosixPty = struct {
             _ = posix.close(slave);
         }
 
-        cloexec: {
-            const flags = posix.fcntl(master, posix.F.GETFD, 0) catch {
-                break :cloexec;
-            };
-
-            _ = posix.fcntl(
-                master,
-                posix.F.SETFD,
-                flags | posix.FD_CLOEXEC,
-            ) catch {
-                break :cloexec;
-            };
-        }
-        var attrs: c.termios = undefined;
-        if (c.tcgetattr(master, &attrs) != 0)
-            return error.OpenptyFailed;
-        attrs.c_iflag |= c.IUTF8;
-        if (c.tcsetattr(master, c.TCSANOW, &attrs) != 0)
-            return error.OpenptyFailed;
-
         self.master = master;
         self.slave = slave;
         self.id = pty_counter.fetchAdd(1, .acquire);
@@ -190,7 +167,8 @@ const PosixPty = struct {
 
     pub fn close(self: *PosixPty) void {
         posix.close(self.master);
-        posix.close(self.slave);
+        // TODO: this is closed by the child process starting
+        // posix.close(self.slave);
     }
 
     pub fn resize(self: *PosixPty, size: PtySize) !void {

@@ -3,27 +3,41 @@ const builtin = @import("builtin");
 
 const asni = @import("asni.zig");
 const keyboard = @import("keyboard.zig");
-const pty = @import("pty.zig");
 
 const CircularBuffer = @import("CircularBuffer.zig");
-const Pty = pty.Pty;
+const Pty = @import("pty.zig").Pty;
 const ChildProcess = @import("ChildProcess.zig");
 
 pub fn main() !void {
-    var pty_seisson: Pty = undefined;
-    try pty_seisson.open(.{});
-    defer pty_seisson.close();
+    var pty: Pty = undefined;
+    try pty.open(.{});
+    defer pty.close();
 
-    // var circular_buffer = try CircularBuffer.new(64 * 1024);
-    // defer circular_buffer.deinit();
+    var child: ChildProcess = .{
+        .exe_path = "zsh",
+        .pty = &pty,
+        .args = &.{},
+    };
+
+    try child.start(std.heap.c_allocator);
+    defer child.terminate();
+
+    var stdin = child.stdin.?;
+    var stdout = child.stdout.?;
+
+    _ = try stdin.write("echo HelloWorld\n");
+
+    while (true) {
+        var buffer: [1024]u8 = undefined;
+        const len = try stdout.read(&buffer);
+        if (len > 0) {
+            std.debug.print("len<{}>: {x:02}<end>\n", .{ len, buffer[0..len] });
+        }
+    }
 }
 
 test "test all" {
-    // std.testing.refAllDecls(@This());
-    // std.testing.refAllDecls(pty);
-    // std.testing.refAllDecls(CircularBuffer);
-    std.testing.refAllDecls(ChildProcess);
-    // std.testing.refAllDecls(asni);
+    std.testing.refAllDecls(@This());
 }
 
 pub const UNICODE = true;
