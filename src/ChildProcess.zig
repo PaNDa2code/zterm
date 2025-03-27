@@ -109,9 +109,15 @@ fn startWindows(self: *ChildProcess, arina: Allocator) !void {
 
     var proc_info = std.mem.zeroes(win32thread.PROCESS_INFORMATION);
 
-    const path = try findPathAlloc(arina, self.exe_path);
-    const path_absolute = try std.fs.realpathAlloc(arina, path orelse self.exe_path);
-    const path_absoluteW = try WideAlloc(arina, path_absolute);
+    const path = try findPathAlloc(arina, self.exe_path) orelse self.exe_path;
+
+    const path_absolute =
+        if (std.fs.path.isAbsoluteWindows(path))
+            path
+        else
+            try std.fs.realpathAlloc(arina, path);
+
+    const pathW = try WideAlloc(arina, path_absolute);
 
     const cwd = if (self.cwd) |cwd_path| (try WideAlloc(arina, cwd_path)).ptr else null;
 
@@ -129,7 +135,7 @@ fn startWindows(self: *ChildProcess, arina: Allocator) !void {
     }
 
     if (win32thread.CreateProcessW(
-        path_absoluteW.ptr,
+        pathW.ptr,
         null,
         null,
         null,
@@ -161,7 +167,11 @@ fn startPosix(self: *ChildProcess, arina: std.mem.Allocator) !void {
     const master_fd = self.pty.?.master;
 
     const path = try findPathAlloc(arina, self.exe_path);
-    const path_absolute = try std.fs.realpathAlloc(arina, path orelse self.exe_path);
+    const path_absolute =
+        if (std.fs.path.isAbsolutePosix(path))
+            path
+        else
+            try std.fs.realpathAlloc(arina, path);
     const pathZ = try arina.dupeZ(u8, path_absolute);
     const argsZ = try arina.allocSentinel(?[*:0]u8, self.args.len, null);
     for (self.args, 0..) |arg, i| {
@@ -219,33 +229,26 @@ fn findPathAlloc(allocator: Allocator, exe: []const u8) !?[]const u8 {
     const sep = std.fs.path.sep;
     const delimiter = std.fs.path.delimiter;
 
-    const exe_ext = ".exe";
-    var full_exe_name = exe;
-    if (os == .windows and !std.mem.endsWith(u8, exe, exe_ext)) {
-        full_exe_name = try std.fmt.allocPrint(allocator, "{s}.exe", .{exe});
-    }
+    if (std.mem.containsAtLeastScalar(u8, exe, 1, sep)) return null;
 
-    const PATH = switch (os) {
-        .windows => getpathblock: {
-            const win_path = std.process.getenvW(Wide("PATH")) orelse return null;
-            const path = try std.unicode.utf16LeToUtf8AllocZ(allocator, win_path[0..]);
-            break :getpathblock path;
-        },
-        else => posix.getenvZ("PATH") orelse return null,
-    };
+    const suffix =
+        if (os == .windows and !std.mem.endsWith(u8, exe, ".exe"))
+            ".exe"
+        else
+            "";
 
-    defer if (os == .windows) allocator.free(PATH);
+    const PATH = try std.process.getEnvVarOwned(allocator, "PATH");
+    defer allocator.free(PATH);
 
-    var it = std.mem.tokenizeScalar(u8, PATH, delimiter);
     var path_buf: [std.fs.max_path_bytes]u8 = undefined;
+    var it = std.mem.tokenizeScalar(u8, PATH, delimiter);
+
     while (it.next()) |search_path| {
-        const full_path = try std.fmt.bufPrintZ(&path_buf, "{s}{c}{s}", .{ search_path, sep, full_exe_name });
+        const full_path = try std.fmt.bufPrintZ(&path_buf, "{s}{c}{s}{s}", .{ search_path, sep, exe, suffix });
         const file = std.fs.cwd().openFile(full_path, .{}) catch |err| {
             switch (err) {
                 error.FileNotFound, error.AccessDenied => continue,
-                else => {
-                    return err;
-                },
+                else => return err,
             }
         };
         defer file.close();
