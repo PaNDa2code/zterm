@@ -43,17 +43,15 @@ stdin: ?File = null,
 stdout: ?File = null,
 stderr: ?File = null,
 
-pty: ?*Pty = null,
-
-pub fn start(self: *ChildProcess, allocator: Allocator) !void {
+pub fn start(self: *ChildProcess, allocator: Allocator, pty: ?*Pty) !void {
     var arina = std.heap.ArenaAllocator.init(allocator);
     defer arina.deinit();
 
     const arina_allocator = arina.allocator();
 
     return switch (builtin.os.tag) {
-        .windows => self.startWindows(arina_allocator),
-        .linux, .macos => self.startPosix(arina_allocator),
+        .windows => self.startWindows(arina_allocator, pty),
+        .linux, .macos => self.startPosix(arina_allocator, pty),
         else => @compileError("os is not supported"),
     };
 }
@@ -74,11 +72,11 @@ pub fn wait(self: *ChildProcess) !void {
     };
 }
 
-fn startWindows(self: *ChildProcess, arina: Allocator) !void {
+fn startWindows(self: *ChildProcess, arina: Allocator, pty: ?*Pty) !void {
     var startup_info_ex = std.mem.zeroes(win32thread.STARTUPINFOEXW);
     startup_info_ex.StartupInfo.cb = @sizeOf(win32thread.STARTUPINFOEXW);
 
-    if (self.pty) |pty| {
+    if (pty) |_pty| {
         var bytes_required: usize = 0;
         // ignored becuse it always fails
         _ = win32thread.InitializeProcThreadAttributeList(null, 1, 0, &bytes_required);
@@ -95,16 +93,16 @@ fn startWindows(self: *ChildProcess, arina: Allocator) !void {
             startup_info_ex.lpAttributeList,
             0,
             win32thread.PROC_THREAD_ATTRIBUTE_PSEUDOCONSOLE,
-            pty.h_pesudo_console,
+            _pty.h_pesudo_console,
             @sizeOf(win32con.HPCON),
             null,
             null,
         ) == 0) {
             return error.UpdateProcThreadAttributeFailed;
         }
-        self.stdin = .{ .handle = pty.master_write };
-        self.stdout = .{ .handle = pty.master_read };
-        self.stderr = .{ .handle = pty.master_read };
+        self.stdin = .{ .handle = _pty.master_write };
+        self.stdout = .{ .handle = _pty.master_read };
+        self.stderr = .{ .handle = _pty.master_read };
     }
 
     var proc_info = std.mem.zeroes(win32thread.PROCESS_INFORMATION);
@@ -140,10 +138,10 @@ fn startWindows(self: *ChildProcess, arina: Allocator) !void {
         null,
         null,
         0,
-        if (self.pty != null) .{ .EXTENDED_STARTUPINFO_PRESENT = 1 } else .{},
+        if (pty != null) .{ .EXTENDED_STARTUPINFO_PRESENT = 1 } else .{},
         env_block,
         cwd,
-        if (self.pty != null) &startup_info_ex.StartupInfo else null,
+        if (pty != null) &startup_info_ex.StartupInfo else null,
         &proc_info,
     ) == 0) {
         return error.CreateProcessWFailed;
@@ -162,11 +160,11 @@ fn waitWindows(self: *ChildProcess) !void {
     }
 }
 
-fn startPosix(self: *ChildProcess, arina: std.mem.Allocator) !void {
-    const slave_fd = self.pty.?.slave;
-    const master_fd = self.pty.?.master;
+fn startPosix(self: *ChildProcess, arina: std.mem.Allocator, pty: ?*Pty) !void {
+    const slave_fd = pty.?.slave;
+    const master_fd = pty.?.master;
 
-    const path = try findPathAlloc(arina, self.exe_path);
+    const path = try findPathAlloc(arina, self.exe_path) orelse self.exe_path;
     const path_absolute =
         if (std.fs.path.isAbsolutePosix(path))
             path
@@ -229,7 +227,7 @@ fn findPathAlloc(allocator: Allocator, exe: []const u8) !?[]const u8 {
     const sep = std.fs.path.sep;
     const delimiter = std.fs.path.delimiter;
 
-    if (std.mem.containsAtLeastScalar(u8, exe, 1, sep)) return null;
+    if (std.mem.containsAtLeastScalar(u8, exe, 1, sep)) return exe;
 
     const suffix =
         if (os == .windows and !std.mem.endsWith(u8, exe, ".exe"))
@@ -268,11 +266,10 @@ test "test ChildProcess" {
 
     var child: ChildProcess = .{
         .exe_path = if (os == .windows) "cmd" else "bash",
-        .pty = &pty,
         .args = &.{},
     };
 
-    try child.start(std.testing.allocator);
+    try child.start(std.testing.allocator, &pty);
     defer child.terminate();
 
     var child_stdin = child.stdin.?;
