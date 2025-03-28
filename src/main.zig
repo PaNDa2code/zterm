@@ -1,9 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
-const asni = @import("asni.zig");
-const keyboard = @import("keyboard.zig");
-
 const CircularBuffer = @import("CircularBuffer.zig");
 const Pty = @import("pty.zig").Pty;
 const ChildProcess = @import("ChildProcess.zig");
@@ -15,11 +12,10 @@ pub fn main() !void {
 
     var child: ChildProcess = .{
         .exe_path = "zsh",
-        .pty = &pty,
         .args = &.{},
     };
 
-    try child.start(std.heap.c_allocator);
+    try child.start(std.heap.c_allocator, null);
     defer child.terminate();
 
     var stdin = child.stdin.?;
