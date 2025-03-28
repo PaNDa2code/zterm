@@ -1,7 +1,7 @@
 const std = @import("std");
-const builtin = @import("builtin");
+const C0 = @import("control_codes.zig").C0;
 
-pub fn findEscs(allocator: std.mem.Allocator, buffer: []const u8) !std.SinglyLinkedList(usize) {
+pub fn findESCs(allocator: std.mem.Allocator, buffer: []const u8) !std.SinglyLinkedList(usize) {
     const Node = std.SinglyLinkedList(usize).Node;
 
     const v_len = std.simd.suggestVectorLength(u8) orelse @compileError("Can't get the suggested vector length");
@@ -59,6 +59,16 @@ pub fn findEscs(allocator: std.mem.Allocator, buffer: []const u8) !std.SinglyLin
     return std.SinglyLinkedList(usize){ .first = dummy.next };
 }
 
+fn parseEscSeq(buffer: []const u8, index: usize) void {
+    if (buffer.len == 0) return;
+
+    if (buffer[0] != '\x1b') return;
+
+    for(buffer[1..]) |c| {
+
+    }
+}
+
 test {
     const allocator = std.testing.allocator;
     var buffer: [147]u8 = undefined;
@@ -66,7 +76,7 @@ test {
     buffer[127] = 0x1b;
     buffer[146] = 0x1b;
 
-    var indexs = try findEscs(allocator, &buffer);
+    var indexs = try findESCs(allocator, &buffer);
 
     try std.testing.expect(indexs.len() == 3);
     while (indexs.popFirst()) |node| : (allocator.destroy(node)) {
