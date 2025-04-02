@@ -34,7 +34,7 @@ pub fn main() !void {
 }
 
 test "test all" {
-    std.testing.refAllDecls(@This());
+    std.testing.refAllDecls(@import("parser.zig"));
 }
 
 pub const UNICODE = true;
