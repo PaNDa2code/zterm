@@ -21,13 +21,14 @@ pub fn main() !void {
     var stdin = child.stdin.?;
     var stdout = child.stdout.?;
 
-    _ = try stdin.writeAll("echo HelloWorld\n");
+    _ = try stdin.writeAll("echo HelloWorld\r\n");
 
     while (true) {
         var buffer: [1024]u8 = undefined;
         const len = try stdout.read(&buffer);
         if (len > 0) {
-            std.debug.print("len<{}>: {x:02}<end>\n", .{ len, buffer[0..len] });
+            const formatter = std.fmt.fmtSliceEscapeLower(buffer[0..len]);
+            std.debug.print("{x}", .{formatter});
         }
     }
 }
