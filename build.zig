@@ -18,8 +18,12 @@ pub fn build(b: *std.Build) void {
     const win32 = b.dependency("zigwin32", .{});
     const win32_mod = win32.module("win32");
 
+    const vtparse = b.dependency("vtparse", .{});
+    const vtparse_mod = vtparse.module("vtparse");
+
     exe_mod.addImport("win32", win32_mod);
     exe_mod.addImport("openpty", openpty_mod);
+    exe_mod.addImport("vtparse", vtparse_mod);
 
     const exe = b.addExecutable(.{
         .name = "cross_pty",

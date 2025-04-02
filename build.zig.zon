@@ -44,6 +44,10 @@
             .url = "git+https://github.com/PaNDa2code/zig_openpty#675c1859f013a10f7e8ab56fa0e3bff23fc29090",
             .hash = "zig_openpty-0.0.0-5hNBifNDAADjQXWQqFaTNM6CIu65ceBT15Y8fXhJWGD8",
         },
+        .vtparse = .{
+            .url = "./libs/vtparse",
+            .hash = "vtparse-0.0.0-hv8XcHx6AAAclfzvJHzo274mJYw4s2SpY8OFj5r0aTLy",
+        },
     },
     .paths = .{
         "build.zig",

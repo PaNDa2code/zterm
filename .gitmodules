@@ -1,0 +1,3 @@
+[submodule "libs/vtparse"]
+	path = libs/vtparse
+	url = https://github.com/Calder-Ty/vtparse
