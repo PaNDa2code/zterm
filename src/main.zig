@@ -1,9 +1,9 @@
 const std = @import("std");
 const builtin = @import("builtin");
 
+const ChildProcess = @import("ChildProcess.zig");
 const CircularBuffer = @import("CircularBuffer.zig");
 const Pty = @import("pty.zig").Pty;
-const ChildProcess = @import("ChildProcess.zig");
 
 pub fn main() !void {
     var pty: Pty = undefined;
@@ -11,17 +11,17 @@ pub fn main() !void {
     defer pty.close();
 
     var child: ChildProcess = .{
-        .exe_path = "zsh",
+        .exe_path = if (builtin.os.tag == .windows) "cmd" else "zsh",
         .args = &.{},
     };
 
-    try child.start(std.heap.c_allocator, null);
+    try child.start(std.heap.page_allocator, &pty);
     defer child.terminate();
 
     var stdin = child.stdin.?;
     var stdout = child.stdout.?;
 
-    _ = try stdin.write("echo HelloWorld\n");
+    _ = try stdin.writeAll("echo HelloWorld\n");
 
     while (true) {
         var buffer: [1024]u8 = undefined;

@@ -40,6 +40,10 @@
             .url = "git+https://github.com/marlersoft/zigwin32/#7b434a47c2b85f395d8e5a6dca47af6a74422521",
             .hash = "zigwin32-25.0.28-preview-AAAAALqY-wMp_N2rd4U4tD9LAxh0TbUPLKhzx6lngGQK",
         },
+        .zig_openpty = .{
+            .url = "git+https://github.com/PaNDa2code/zig_openpty#675c1859f013a10f7e8ab56fa0e3bff23fc29090",
+            .hash = "zig_openpty-0.0.0-5hNBifNDAADjQXWQqFaTNM6CIu65ceBT15Y8fXhJWGD8",
+        },
     },
     .paths = .{
         "build.zig",

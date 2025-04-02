@@ -103,7 +103,7 @@ const WinPty = struct {
     }
 
     pub fn close(self: *WinPty) void {
-        // no need to terminate the sub process, closing the PTY will do.
+        // no need to terminate the sub process, closing the HPCON will do.
 
         // need to drain the communication pipes before calling ClosePseudoConsole
         var bytes_avalable: u32 = 0;
@@ -135,25 +135,20 @@ const PosixPty = struct {
     size: struct { height: u16, width: u16 },
     id: u32,
 
-    const c = @cImport({
-        @cInclude("sys/ioctl.h");
-        @cInclude("pty.h");
-    });
+    const openpty = @import("openpty");
 
     pub fn open(self: *PosixPty, options: PtyOptions) !void {
-        var master: c_int = undefined;
-        var slave: c_int = undefined;
+        var master: i32 = undefined;
+        var slave: i32 = undefined;
 
-        var ws: c.winsize = .{
-            .ws_row = @intCast(options.size.height),
-            .ws_col = @intCast(options.size.width),
-            .ws_xpixel = 0,
-            .ws_ypixel = 0,
+        var ws: posix.winsize = .{
+            .row = @intCast(options.size.height),
+            .col = @intCast(options.size.width),
+            .xpixel = 0,
+            .ypixel = 0,
         };
 
-        if (c.openpty(&master, &slave, null, null, &ws) != 0) {
-            return error.OpenPtyFailed;
-        }
+        try openpty.openpty(&master, &slave, null, null, null, &ws);
 
         errdefer {
             _ = posix.close(master);
@@ -172,14 +167,14 @@ const PosixPty = struct {
     }
 
     pub fn resize(self: *PosixPty, size: PtySize) !void {
-        const ws: c.winsize = .{
-            .ws_row = size.height,
-            .ws_col = size.width,
-            .ws_xpixel = 0,
-            .ws_ypixel = 0,
+        const ws: posix.winsize = .{
+            .row = size.height,
+            .col = size.width,
+            .xpixel = 0,
+            .ypixel = 0,
         };
 
-        if (c.ioctl(self.master, c.TIOCSWINSZ, &ws) < 0) {
+        if (std.os.linux.ioctl(self.master, 0x5414, &ws) < 0) {
             return error.PtyResizeFailed;
         }
     }

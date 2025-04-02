@@ -6,11 +6,7 @@ const Wide = std.unicode.utf8ToUtf16LeStringLiteral;
 const WideAlloc = std.unicode.utf8ToUtf16LeAllocZ;
 
 const posix = std.posix;
-const posix_c = @cImport({
-    @cInclude("unistd.h");
-    @cInclude("sys/ioctl.h");
-    @cInclude("pty.h");
-});
+const linux = std.os.linux;
 
 const win32con = win32.system.console;
 const win32fnd = win32.foundation;
@@ -36,7 +32,7 @@ id: switch (os) {
 
 exe_path: []const u8,
 args: []const []const u8 = &.{""},
-env_map: ?std.hash_map.StringHashMap([]const u8) = null,
+env_map: ?std.process.EnvMap = null,
 cwd: ?[]const u8 = null,
 
 stdin: ?File = null,
@@ -176,7 +172,8 @@ fn startPosix(self: *ChildProcess, arina: std.mem.Allocator, pty: ?*Pty) !void {
         argsZ[i] = try arina.dupeZ(u8, arg);
     }
 
-    const envZ: [*:null]?[*:0]u8 = if (self.env_map) |env_map| envz: {
+    const env_map = self.env_map orelse try std.process.getEnvMap(arina);
+    const envZ: [*:null]const ?[*:0]u8 = envz: {
         const envZ = try arina.allocSentinel(?[*:0]u8, env_map.count(), null);
         var it = env_map.iterator();
         var i: usize = 0;
@@ -184,11 +181,11 @@ fn startPosix(self: *ChildProcess, arina: std.mem.Allocator, pty: ?*Pty) !void {
             envZ[i] = try std.fmt.allocPrintZ(
                 arina,
                 "{s}={s}",
-                .{ entry.key_ptr, entry.value_ptr },
+                .{ entry.key_ptr.*, entry.value_ptr.* },
             );
         }
         break :envz envZ.ptr;
-    } else std.c.environ;
+    };
 
     const pid = try posix.fork();
 
@@ -200,8 +197,8 @@ fn startPosix(self: *ChildProcess, arina: std.mem.Allocator, pty: ?*Pty) !void {
         return;
     }
 
-    _ = posix_c.setsid();
-    _ = posix_c.ioctl(slave_fd, posix_c.TIOCSCTTY, @as(usize, 0));
+    _ = linux.setsid();
+    _ = linux.ioctl(slave_fd, 0x540E, @as(usize, 0));
 
     try posix.dup2(slave_fd, posix.STDIN_FILENO);
     try posix.dup2(slave_fd, posix.STDOUT_FILENO);

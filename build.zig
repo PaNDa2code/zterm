@@ -9,11 +9,17 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
-        .link_libc = true,
+        .link_libc = false,
     });
 
-    if (optimize == .Debug or target.result.os.tag == .windows)
-        exe_mod.addImport("win32", b.dependency("zigwin32", .{}).module("win32"));
+    const zig_openpty = b.dependency("zig_openpty", .{});
+    const openpty_mod = zig_openpty.module("openpty");
+
+    const win32 = b.dependency("zigwin32", .{});
+    const win32_mod = win32.module("win32");
+
+    exe_mod.addImport("win32", win32_mod);
+    exe_mod.addImport("openpty", openpty_mod);
 
     const exe = b.addExecutable(.{
         .name = "cross_pty",
@@ -35,7 +41,6 @@ pub fn build(b: *std.Build) void {
 
     const exe_unit_tests = b.addTest(.{
         .root_module = exe_mod,
-        .link_libc = true,
         .target = target,
         .optimize = optimize,
     });
