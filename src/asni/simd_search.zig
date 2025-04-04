@@ -1,5 +1,4 @@
 const std = @import("std");
-const C0 = @import("control_codes.zig").C0;
 
 pub fn findESCs(allocator: std.mem.Allocator, buffer: []const u8) !std.SinglyLinkedList(usize) {
     const Node = std.SinglyLinkedList(usize).Node;
@@ -59,15 +58,15 @@ pub fn findESCs(allocator: std.mem.Allocator, buffer: []const u8) !std.SinglyLin
     return std.SinglyLinkedList(usize){ .first = dummy.next };
 }
 
-fn parseEscSeq(buffer: []const u8, index: usize) void {
-    if (buffer.len == 0) return;
-
-    if (buffer[0] != '\x1b') return;
-
-    for(buffer[1..]) |c| {
-
-    }
-}
+// fn parseEscSeq(buffer: []const u8, index: usize) void {
+//     if (buffer.len == 0) return;
+//
+//     if (buffer[0] != '\x1b') return;
+//
+//     for(buffer[1..]) |c| {
+//
+//     }
+// }
 
 test {
     const allocator = std.testing.allocator;

@@ -2,20 +2,6 @@ const std = @import("std");
 const win32 = @import("win32");
 const builtin = @import("builtin");
 
-const L = std.unicode.utf8ToUtf16LeStringLiteral;
-const W = std.unicode.utf8ToUtf16LeAllocZ;
-
-const posix = std.posix;
-const win32con = win32.system.console;
-const win32fnd = win32.foundation;
-const win32pipe = win32.system.pipes;
-const win32sec = win32.security;
-const win32thread = win32.system.threading;
-const win32storeage = win32.storage;
-const win32fs = win32storeage.file_system;
-const win32mem = win32.system.memory;
-
-var pty_counter = std.atomic.Value(u32).init(0);
 const os = builtin.os.tag;
 
 pub const ShellEnum = enum {
@@ -23,6 +9,7 @@ pub const ShellEnum = enum {
     pws,
     bash,
     zsh,
+    defualt,
 
     fn toString(self: ShellEnum) []const u8 {
         return switch (self) {
@@ -30,6 +17,7 @@ pub const ShellEnum = enum {
             .pws => "powershell",
             .bash => "bash",
             .zsh => "zsh",
+            else => {},
         };
     }
 };
@@ -49,6 +37,17 @@ pub const PtySize = packed struct {
 pub const Pty = if (os == .windows) WinPty else PosixPty;
 
 const WinPty = struct {
+    const L = std.unicode.utf8ToUtf16LeStringLiteral;
+    const W = std.unicode.utf8ToUtf16LeAllocZ;
+
+    const win32con = win32.system.console;
+    const win32fnd = win32.foundation;
+    const win32pipe = win32.system.pipes;
+    const win32sec = win32.security;
+    const win32thread = win32.system.threading;
+    const win32storeage = win32.storage;
+    const win32fs = win32storeage.file_system;
+    const win32mem = win32.system.memory;
     const HANDLE = win32fnd.HANDLE;
     const HPCON = win32con.HPCON;
 
@@ -128,6 +127,8 @@ const WinPty = struct {
 };
 
 const PosixPty = struct {
+    const posix = std.posix;
+
     pub const Fd = posix.fd_t;
 
     master: Fd,
@@ -157,7 +158,6 @@ const PosixPty = struct {
 
         self.master = master;
         self.slave = slave;
-        self.id = pty_counter.fetchAdd(1, .acquire);
     }
 
     pub fn close(self: *PosixPty) void {
