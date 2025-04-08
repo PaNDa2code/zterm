@@ -2,65 +2,64 @@ const std = @import("std");
 const win32 = @import("win32");
 const builtin = @import("builtin");
 
+const renderer = @import("renderer.zig");
+
 const os = builtin.os.tag;
+const Allocator = std.mem.Allocator;
 
 pub const Window = if (os == .windows) Win32Window else X11Window;
 
-const Win32Window = struct {
-    const L = std.unicode.utf8ToUtf16LeStringLiteral;
-    const W = std.unicode.utf8ToUtf16LeAllocZ;
+pub const WindowResizeEvent = struct {
+    new_height: u32,
+    new_width: u32,
+};
 
-    const win32con = win32.system.console;
+const Win32Window = struct {
+    const utf8ToUtf16LeStringLiteral = std.unicode.utf8ToUtf16LeStringLiteral;
+    const utf8ToUtf16LeAllocZ = std.unicode.utf8ToUtf16LeAllocZ;
+
     const win32fnd = win32.foundation;
-    const win32pipe = win32.system.pipes;
-    const win32sec = win32.security;
-    const win32thread = win32.system.threading;
-    const win32storeage = win32.storage;
-    const win32fs = win32storeage.file_system;
-    const win32mem = win32.system.memory;
     const win32wm = win32.ui.windows_and_messaging;
     const win32dwm = win32.graphics.dwm;
     const win32loader = win32.system.library_loader;
 
     const HANDLE = win32fnd.HANDLE;
-    const HPCON = win32con.HPCON;
     const HWND = win32fnd.HWND;
     const LRESULT = win32fnd.LRESULT;
     const WPARAM = win32fnd.WPARAM;
     const LPARAM = win32fnd.LPARAM;
 
+    const D3D11Renderer = renderer.D3D11Renderer;
+
     hwnd: HWND = undefined,
-    title: []const u8 = undefined,
-    hight: u32,
+    title: []const u8,
+    height: u32,
     width: u32,
+    renderer: D3D11Renderer = undefined,
 
-    pub fn init(self: *Win32Window) !void {
-        const class_name = L("WindowClass");
+    pub fn init(self: *Window, allocator: Allocator) !void {
+        const class_name = try utf8ToUtf16LeAllocZ(allocator, self.title);
+        defer allocator.free(class_name);
 
-        const window_class: win32wm.WNDCLASSW = .{
-            .lpszClassName = class_name,
-            .hInstance = win32loader.GetModuleHandle(null),
-            .lpfnWndProc = &WindowProcSetup,
-            .style = .{},
-            .cbClsExtra = 0,
-            .cbWndExtra = 0,
-            .hbrBackground = null,
-            .hCursor = null,
-            .hIcon = null,
-            .lpszMenuName = null,
-        };
+        var window_class = std.mem.zeroes(win32wm.WNDCLASSW);
+        window_class.lpszClassName = class_name;
+        window_class.hInstance = win32loader.GetModuleHandle(null);
+        window_class.lpfnWndProc = &WindowProcSetup;
 
         _ = win32wm.RegisterClassW(&window_class);
+
+        const window_name = try utf8ToUtf16LeAllocZ(allocator, self.title);
+        defer allocator.free(window_name);
 
         const hwnd = win32wm.CreateWindowExW(
             .{},
             class_name,
-            L("terminal"),
-            win32wm.WS_OVERLAPPED,
+            window_name,
+            win32wm.WS_OVERLAPPEDWINDOW,
             win32wm.CW_USEDEFAULT,
             win32wm.CW_USEDEFAULT,
             @bitCast(self.width),
-            @bitCast(self.hight),
+            @bitCast(self.height),
             null,
             null,
             window_class.hInstance,
@@ -69,9 +68,9 @@ const Win32Window = struct {
 
         // const menu = win32wm.CreateMenu() orelse return error.CreateMenuFailed;
         // const menu_bar = win32wm.CreateMenu() orelse return error.CreateMenuFailed;
-        // _ = win32wm.AppendMenuW(menu, win32wm.MF_STRING, 1, L("New"));
-        // _ = win32wm.AppendMenuW(menu, win32wm.MF_STRING, 2, L("Close"));
-        // _ = win32wm.AppendMenuW(menu_bar, win32wm.MF_POPUP, @intFromPtr(menu), L("&File"));
+        // _ = win32wm.AppendMenuW(menu, win32wm.MF_STRING, 1, utf8ToUtf16LeStringLiteral("&New"));
+        // _ = win32wm.AppendMenuW(menu, win32wm.MF_STRING, 2, utf8ToUtf16LeStringLiteral("&Close"));
+        // _ = win32wm.AppendMenuW(menu_bar, win32wm.MF_POPUP, @intFromPtr(menu), utf8ToUtf16LeStringLiteral("&File"));
         // _ = win32wm.SetMenu(hwnd, menu_bar);
 
         const darkmode: u32 = 1;
@@ -84,14 +83,22 @@ const Win32Window = struct {
         );
 
         _ = win32wm.ShowWindow(hwnd, .{ .SHOWNORMAL = 1 });
+
+        self.renderer = try D3D11Renderer.init(hwnd);
         self.hwnd = hwnd;
     }
+
+    pub fn resize(self: *Window, height: u32, width: u32) !void {
+        self.height = height;
+        self.width = width;
+    }
+
     fn WindowProcSetup(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) callconv(.winapi) LRESULT {
         if (msg != win32wm.WM_NCCREATE) {
             return win32wm.DefWindowProc(hwnd, msg, wparam, lparam);
         }
         const p_create: *const win32wm.CREATESTRUCTW = @ptrFromInt(@as(usize, @bitCast(lparam)));
-        const self: *Win32Window = @ptrCast(@alignCast(p_create.lpCreateParams));
+        const self: *Window = @ptrCast(@alignCast(p_create.lpCreateParams));
 
         _ = win32wm.SetWindowLongPtr(hwnd, .P_USERDATA, @bitCast(@intFromPtr(self)));
         _ = win32wm.SetWindowLongPtr(hwnd, .P_WNDPROC, @bitCast(@intFromPtr(&WindowProcWrapper)));
@@ -99,11 +106,10 @@ const Win32Window = struct {
         return self.WindowProc(hwnd, msg, wparam, lparam);
     }
     fn WindowProcWrapper(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) callconv(.winapi) LRESULT {
-        const self: *Win32Window = @ptrFromInt(@as(usize, @bitCast(win32wm.GetWindowLongPtr(hwnd, .P_USERDATA))));
+        const self: *Window = @ptrFromInt(@as(usize, @bitCast(win32wm.GetWindowLongPtr(hwnd, .P_USERDATA))));
         return self.WindowProc(hwnd, msg, wparam, lparam);
     }
-    fn WindowProc(self: *Win32Window, hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) LRESULT {
-        _ = self; // autofix
+    fn WindowProc(self: *Window, hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) LRESULT {
         switch (msg) {
             win32wm.WM_DESTROY => {
                 win32wm.PostQuitMessage(0);
@@ -116,14 +122,17 @@ const Win32Window = struct {
                 return 0;
             },
             win32wm.WM_SIZE => {
+                const lp: usize = @as(usize, @bitCast(lparam));
+                const width: u32 = @intCast(lp & 0xFFFF);
+                const height: u32 = @intCast((lp >> 16) & 0xFFFF);
+                self.resize(height, width) catch return -1;
                 return 0;
             },
             else => return win32wm.DefWindowProcW(hwnd, msg, wparam, lparam),
         }
     }
 
-    pub fn messageLoop(self: *Win32Window) void {
-        _ = self; // autofix
+    pub fn messageLoop(self: *Window) void {
         var msg: win32wm.MSG = undefined;
         while (true) {
             if (win32wm.PeekMessageW(&msg, null, 0, 0, .{ .REMOVE = 1 }) > 0) {
@@ -131,15 +140,22 @@ const Win32Window = struct {
                     break;
                 _ = win32wm.TranslateMessage(&msg);
                 _ = win32wm.DispatchMessage(&msg);
+
+                self.renderer.clearBuffer(.{ .r = 0.08, .b = 0.08, .g = 0.08, .a = 1 });
+                self.renderer.presentBuffer();
             }
         }
     }
 };
 
 const X11Window = struct {
-    socket: i32,
-    pub fn init(self: *X11Window) !void {
-        _ = self;
+    socket: i32 = undefined,
+    title: []const u8,
+    height: u32,
+    width: u32,
+    allocator: Allocator,
+    pub fn init(self: *X11Window, allocator: Allocator) !void {
+        self.allocator = allocator;
     }
 
     pub fn messageLoop(self: *X11Window) void {
