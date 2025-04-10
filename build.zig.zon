@@ -47,6 +47,10 @@
         .vtparse = .{
             .path = "./libs/vtparse",
         },
+        .freetype = .{
+            .url = "https://github.com/freetype/freetype/archive/refs/tags/VER-2-13-3.tar.gz",
+            .hash = "N-V-__8AAKfbpwAXnUJ6TJEaqZGWgp6F_8OhiLErejRxQ7Y5",
+        },
     },
     .paths = .{
         "build.zig",
@@ -54,6 +58,6 @@
         "src",
         // For example...
         //"LICENSE",
-        //"README.md",
+        "README.md",
     },
 }

@@ -153,7 +153,7 @@ const X11Window = struct {
     title: []const u8,
     height: u32,
     width: u32,
-    allocator: Allocator,
+    allocator: Allocator = undefined,
     pub fn init(self: *X11Window, allocator: Allocator) !void {
         self.allocator = allocator;
     }
