@@ -104,7 +104,7 @@ fn init_windows(self: *CircularBuffer, requsted_size: usize) CreateError!void {
         @ptrFromInt(@intFromPtr(palce_holder) + size),
         0,
         size,
-        .{ .REPLACE_PLACEHOLDER = 0 },
+        .{ .REPLACE_PLACEHOLDER = 1 },
         @bitCast(win32.system.memory.PAGE_READWRITE),
         null,
         0,

@@ -2,8 +2,8 @@ const KeyboardEvent = @import("Keyboard.zig").KeyboardEvent;
 const WindowResizeEvent = @import("window.zig").WindowResizeEvent;
 
 pub const EventType = enum {
-    WindowResize,
-    KeyBoardInput,
+    Window,
+    KeyboardInput,
     MouseInput,
     PtyIO,
 };
@@ -11,6 +11,6 @@ pub const EventType = enum {
 pub const Event = union(EventType) {
     KeyBoardInput: KeyboardEvent,
     MouseInput: void,
-    WindowResize: WindowResizeEvent,
+    Window: WindowResizeEvent,
     PtyIO: void,
 };

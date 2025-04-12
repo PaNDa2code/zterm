@@ -5,15 +5,8 @@ pub fn build(b: *std.Build) void {
 
     const optimize = b.standardOptimizeOption(.{});
 
-    const exe_mod = b.createModule(.{
-        .root_source_file = b.path("src/main.zig"),
-        .target = target,
-        .optimize = optimize,
-        .link_libc = false,
-    });
-
-    const zig_openpty = b.dependency("zig_openpty", .{});
-    const openpty_mod = zig_openpty.module("openpty");
+    // const zig_openpty = b.dependency("zig_openpty", .{});
+    // const openpty_mod = zig_openpty.module("openpty");
 
     const win32 = b.dependency("zigwin32", .{});
     const win32_mod = win32.module("win32");
@@ -23,12 +16,11 @@ pub fn build(b: *std.Build) void {
 
     const c_freetype = b.dependency("freetype", .{});
     const freetype = b.addStaticLibrary(.{
-        .name = "freetype",
+        .name = "freetype2",
         .target = target,
         .optimize = optimize,
+        .link_libc = true,
     });
-
-    freetype.linkLibC();
 
     freetype.addCSourceFiles(.{
         .files = ft2_srcs,
@@ -36,17 +28,42 @@ pub fn build(b: *std.Build) void {
         .root = c_freetype.path("."),
     });
 
+    const ftsys = switch (target.result.os.tag) {
+        .windows => "builds/windows/ftsystem.c",
+        // .macos, .linux => "builds/unix/ftsystem.c",
+        else => "src/base/ftsystem.c",
+    };
+
+    const ftdbg = switch (target.result.os.tag) {
+        .windows => "builds/windows/ftdebug.c",
+        else => "src/base/ftdebug.c",
+    };
+
+    freetype.addCSourceFiles(.{
+        .files = &.{ ftsys, ftdbg },
+        .flags = ft2_flags,
+        .root = c_freetype.path("."),
+    });
+
     freetype.addIncludePath(c_freetype.path("include/"));
 
+    const exe_mod = b.createModule(.{
+        .root_source_file = b.path("src/main.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
     exe_mod.addImport("win32", win32_mod);
-    exe_mod.addImport("openpty", openpty_mod);
+    // exe_mod.addImport("openpty", openpty_mod);
     exe_mod.addImport("vtparse", vtparse_mod);
 
+    exe_mod.addIncludePath(c_freetype.path("include/"));
     exe_mod.linkLibrary(freetype);
 
     const exe = b.addExecutable(.{
         .name = "cross_pty",
         .root_module = exe_mod,
+        .linkage = if (target.result.abi == .musl) .static else .dynamic,
     });
 
     b.installArtifact(exe);
@@ -120,4 +137,5 @@ const ft2_srcs: []const []const u8 = &.{
 
 const ft2_flags: []const []const u8 = &.{
     "-DFT2_BUILD_LIBRARY",
+    "-DFT_CONFIG_OPTION_ERROR_STRINGS",
 };

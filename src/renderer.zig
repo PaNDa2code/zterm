@@ -8,6 +8,8 @@ pub const ColorRGBA = packed struct {
     a: f32,
 };
 
+const Allocator = std.mem.Allocator;
+
 pub const D3D11Renderer = struct {
     const win32 = @import("win32");
     const foundation = win32.foundation;

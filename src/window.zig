@@ -36,14 +36,26 @@ const Win32Window = struct {
     height: u32,
     width: u32,
     renderer: D3D11Renderer = undefined,
+    allocator: Allocator = undefined,
 
-    pub fn init(self: *Window, allocator: Allocator) !void {
+    pub fn new(allocator: Allocator, title: []const u8, height: u32, width: u32) Window {
+        return .{
+            .allocator = allocator,
+            .title = title,
+            .height = height,
+            .width = width,
+        };
+    }
+
+    pub fn init(self: *Window) !void {
+        const allocator = self.allocator;
+
         const class_name = try utf8ToUtf16LeAllocZ(allocator, self.title);
         defer allocator.free(class_name);
 
         var window_class = std.mem.zeroes(win32wm.WNDCLASSW);
         window_class.lpszClassName = class_name;
-        window_class.hInstance = win32loader.GetModuleHandle(null);
+        window_class.hInstance = win32loader.GetModuleHandleW(null);
         window_class.lpfnWndProc = &WindowProcSetup;
 
         _ = win32wm.RegisterClassW(&window_class);
@@ -95,18 +107,18 @@ const Win32Window = struct {
 
     fn WindowProcSetup(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) callconv(.winapi) LRESULT {
         if (msg != win32wm.WM_NCCREATE) {
-            return win32wm.DefWindowProc(hwnd, msg, wparam, lparam);
+            return win32wm.DefWindowProcW(hwnd, msg, wparam, lparam);
         }
         const p_create: *const win32wm.CREATESTRUCTW = @ptrFromInt(@as(usize, @bitCast(lparam)));
         const self: *Window = @ptrCast(@alignCast(p_create.lpCreateParams));
 
-        _ = win32wm.SetWindowLongPtr(hwnd, .P_USERDATA, @bitCast(@intFromPtr(self)));
-        _ = win32wm.SetWindowLongPtr(hwnd, .P_WNDPROC, @bitCast(@intFromPtr(&WindowProcWrapper)));
+        _ = win32wm.SetWindowLongPtrW(hwnd, .P_USERDATA, @bitCast(@intFromPtr(self)));
+        _ = win32wm.SetWindowLongPtrW(hwnd, .P_WNDPROC, @bitCast(@intFromPtr(&WindowProcWrapper)));
 
         return self.WindowProc(hwnd, msg, wparam, lparam);
     }
     fn WindowProcWrapper(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) callconv(.winapi) LRESULT {
-        const self: *Window = @ptrFromInt(@as(usize, @bitCast(win32wm.GetWindowLongPtr(hwnd, .P_USERDATA))));
+        const self: *Window = @ptrFromInt(@as(usize, @bitCast(win32wm.GetWindowLongPtrW(hwnd, .P_USERDATA))));
         return self.WindowProc(hwnd, msg, wparam, lparam);
     }
     fn WindowProc(self: *Window, hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) LRESULT {
@@ -139,7 +151,7 @@ const Win32Window = struct {
                 if (msg.message == win32wm.WM_QUIT)
                     break;
                 _ = win32wm.TranslateMessage(&msg);
-                _ = win32wm.DispatchMessage(&msg);
+                _ = win32wm.DispatchMessageW(&msg);
 
                 self.renderer.clearBuffer(.{ .r = 0.08, .b = 0.08, .g = 0.08, .a = 1 });
                 self.renderer.presentBuffer();

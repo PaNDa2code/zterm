@@ -174,7 +174,7 @@ const PosixPty = struct {
             .ypixel = 0,
         };
 
-        if (std.os.linux.ioctl(self.master, 0x5414, &ws) < 0) {
+        if (std.os.linux.ioctl(self.master, 0x5414, @intFromPtr(&ws)) < 0) {
             return error.PtyResizeFailed;
         }
     }
