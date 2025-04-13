@@ -15,37 +15,50 @@ pub fn build(b: *std.Build) void {
     const vtparse_mod = vtparse.module("vtparse");
 
     const c_freetype = b.dependency("freetype", .{});
-    const freetype = b.addStaticLibrary(.{
-        .name = "freetype2",
-        .target = target,
-        .optimize = optimize,
-        .link_libc = true,
-    });
+    const freetype = blk: {
+        const freetype = b.addStaticLibrary(.{
+            .name = "freetype2",
+            .target = target,
+            .optimize = optimize,
+            .link_libc = true,
+        });
 
-    freetype.addCSourceFiles(.{
-        .files = ft2_srcs,
-        .flags = ft2_flags,
-        .root = c_freetype.path("."),
-    });
+        freetype.addCSourceFiles(.{
+            .files = ft2_srcs,
+            .flags = ft2_flags,
+            .root = c_freetype.path("."),
+        });
 
-    const ftsys = switch (target.result.os.tag) {
-        .windows => "builds/windows/ftsystem.c",
-        // .macos, .linux => "builds/unix/ftsystem.c",
-        else => "src/base/ftsystem.c",
+        const ftsys =
+            switch (target.result.os.tag) {
+                .windows => "builds/windows/ftsystem.c",
+                .macos, .linux => "builds/unix/ftsystem.c",
+                else => "src/base/ftsystem.c",
+            };
+
+        freetype.addCSourceFile(.{
+            .file = c_freetype.path(ftsys),
+            .flags = ft2_flags,
+        });
+
+        if (optimize == .Debug) {
+            const ftdbg: []const []const u8 =
+                switch (target.result.os.tag) {
+                    .windows => &.{ "builds/windows/ftdebug.c", "src/base/ftver.rc" },
+                    else => &.{"src/base/ftdebug.c"},
+                };
+
+            freetype.addCSourceFiles(.{
+                .files = ftdbg,
+                .flags = ft2_flags,
+                .root = c_freetype.path("."),
+            });
+        }
+
+        freetype.addIncludePath(c_freetype.path("include/"));
+
+        break :blk freetype;
     };
-
-    const ftdbg = switch (target.result.os.tag) {
-        .windows => "builds/windows/ftdebug.c",
-        else => "src/base/ftdebug.c",
-    };
-
-    freetype.addCSourceFiles(.{
-        .files = &.{ ftsys, ftdbg },
-        .flags = ft2_flags,
-        .root = c_freetype.path("."),
-    });
-
-    freetype.addIncludePath(c_freetype.path("include/"));
 
     const exe_mod = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
@@ -109,7 +122,7 @@ const ft2_srcs: []const []const u8 = &.{
     "src/base/ftpfr.c",
     "src/base/ftstroke.c",
     "src/base/ftsynth.c",
-    "src/base/ftsystem.c", // we will provide our own primitives
+    // "src/base/ftsystem.c", // we will provide our own primitives
     "src/base/fttype1.c",
     "src/base/ftwinfnt.c",
     "src/bdf/bdf.c",
