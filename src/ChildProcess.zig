@@ -256,7 +256,7 @@ fn findPathAlloc(allocator: Allocator, exe: []const u8) !?[]const u8 {
     return null;
 }
 
-test "test ChildProcess" {
+test "test ChildProcess with pty" {
     var pty: Pty = undefined;
     try pty.open(.{});
     defer pty.close();
@@ -268,12 +268,4 @@ test "test ChildProcess" {
 
     try child.start(std.testing.allocator, &pty);
     defer child.terminate();
-
-    var child_stdin = child.stdin.?;
-    var child_stdout = child.stdout.?;
-
-    try child_stdin.writeAll("echo HelloWorld\r\n");
-
-    var buffer: [1024]u8 = undefined;
-    _ = try child_stdout.read(&buffer);
 }

@@ -5,22 +5,18 @@ const ChildProcess = @import("ChildProcess.zig");
 const CircularBuffer = @import("CircularBuffer.zig");
 const Pty = @import("pty.zig").Pty;
 const Window = @import("window.zig").Window;
-const FreeType = @import("FreeType.zig");
+const freetype = @import("freetype.zig");
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = gpa.allocator();
-    var free_type: FreeType = undefined;
-    try free_type.init(allocator);
-    defer free_type.deinit();
+    const ft_library = try freetype.Library.init(allocator);
+    defer ft_library.deinit();
 
-    try free_type.setFont("arial.ttf");
-    var glyph_iter = free_type.glyphIter();
-
-    while (glyph_iter.next()) |_| {
-        std.log.debug("glyph = {c}", .{@as(u8, @truncate(glyph_iter.char_code))});
-    }
+    var window = Window{ .height = 600, .width = 800, .title = "HelloWorld" };
+    try window.init(allocator);
+    window.messageLoop();
 }
 
 test "test all" {
@@ -28,7 +24,7 @@ test "test all" {
     std.testing.refAllDecls(ChildProcess);
     std.testing.refAllDecls(Pty);
     std.testing.refAllDecls(Window);
-    std.testing.refAllDecls(FreeType);
+    std.testing.refAllDecls(freetype);
 }
 
 pub const UNICODE = true;

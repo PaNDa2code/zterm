@@ -2,8 +2,6 @@ const std = @import("std");
 const win32 = @import("win32");
 const builtin = @import("builtin");
 
-const renderer = @import("renderer.zig");
-
 const os = builtin.os.tag;
 const Allocator = std.mem.Allocator;
 
@@ -29,7 +27,7 @@ const Win32Window = struct {
     const WPARAM = win32fnd.WPARAM;
     const LPARAM = win32fnd.LPARAM;
 
-    const D3D11Renderer = renderer.D3D11Renderer;
+    const D3D11Renderer = @import("renderer/D3D11.zig");
 
     hwnd: HWND = undefined,
     title: []const u8,
@@ -47,8 +45,8 @@ const Win32Window = struct {
         };
     }
 
-    pub fn init(self: *Window) !void {
-        const allocator = self.allocator;
+    pub fn init(self: *Window, allocator: Allocator) !void {
+        self.allocator = allocator;
 
         const class_name = try utf8ToUtf16LeAllocZ(allocator, self.title);
         defer allocator.free(class_name);
@@ -153,7 +151,7 @@ const Win32Window = struct {
                 _ = win32wm.TranslateMessage(&msg);
                 _ = win32wm.DispatchMessageW(&msg);
 
-                self.renderer.clearBuffer(.{ .r = 0.08, .b = 0.08, .g = 0.08, .a = 1 });
+                self.renderer.clearBuffer(.{ .r = 0.18, .g = 0.35, .b = 0.5, .a = 1 });
                 self.renderer.presentBuffer();
             }
         }
