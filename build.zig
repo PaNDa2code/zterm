@@ -2,11 +2,10 @@ const std = @import("std");
 
 pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
-
     const optimize = b.standardOptimizeOption(.{});
 
-    // const zig_openpty = b.dependency("zig_openpty", .{});
-    // const openpty_mod = zig_openpty.module("openpty");
+    const zig_openpty = b.dependency("zig_openpty", .{});
+    const openpty_mod = zig_openpty.module("openpty");
 
     const win32 = b.dependency("zigwin32", .{});
     const win32_mod = win32.module("win32");
@@ -67,7 +66,7 @@ pub fn build(b: *std.Build) void {
     });
 
     exe_mod.addImport("win32", win32_mod);
-    // exe_mod.addImport("openpty", openpty_mod);
+    exe_mod.addImport("openpty", openpty_mod);
     exe_mod.addImport("vtparse", vtparse_mod);
 
     exe_mod.addIncludePath(c_freetype.path("include/"));
