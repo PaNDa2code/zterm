@@ -7,6 +7,8 @@ const ft = @cImport({
     @cInclude("freetype/ftmodapi.h");
 });
 
+const ft_error = @import("ft_error.zig");
+
 const Allocator = std.mem.Allocator;
 
 /// FreeType library wrapper struct to be able to use zig allocation interfaces
@@ -19,9 +21,13 @@ pub const Library = struct {
 
     pub fn init(allocator: Allocator) !Library {
         const allocator_ptr = try allocator.create(Allocator);
+        errdefer allocator.destroy(allocator_ptr);
+
         allocator_ptr.* = allocator;
 
         const ft_memory = try allocator.create(ft.FT_MemoryRec_);
+        errdefer allocator.destroy(ft_memory);
+
         ft_memory.* = .{
             .user = allocator_ptr,
             .alloc = &ftAlloc,
@@ -32,9 +38,7 @@ pub const Library = struct {
         var ft_library: ft.FT_Library = null;
 
         const ft_err: ft.FT_Error = ft.FT_New_Library(ft_memory, &ft_library);
-
-        if (ft_err != 0)
-            return error.FT_New_LibraryFalied;
+        try ft_error.ftErrorFromInt(ft_err);
 
         return .{
             .allocator = allocator_ptr,

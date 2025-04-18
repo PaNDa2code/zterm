@@ -5,7 +5,7 @@ const ChildProcess = @import("ChildProcess.zig");
 const CircularBuffer = @import("CircularBuffer.zig");
 const Pty = @import("pty.zig").Pty;
 const Window = @import("window.zig").Window;
-const freetype = @import("freetype.zig");
+const freetype = @import("freetype/freetype.zig");
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};

@@ -31,7 +31,7 @@ pub fn build(b: *std.Build) void {
         const ftsys =
             switch (target.result.os.tag) {
                 .windows => "builds/windows/ftsystem.c",
-                .macos, .linux => "builds/unix/ftsystem.c",
+                // .macos, .linux => "builds/unix/ftsystem.c",
                 else => "src/base/ftsystem.c",
             };
 
