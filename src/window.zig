@@ -29,6 +29,7 @@ const Win32Window = struct {
 
     const D3D11Renderer = @import("renderer/D3D11.zig");
 
+    exit: bool = false,
     hwnd: HWND = undefined,
     title: []const u8,
     height: u32,
@@ -98,6 +99,10 @@ const Win32Window = struct {
         self.hwnd = hwnd;
     }
 
+    pub fn deinit(self: *Window) void {
+        self.renderer.deinit();
+    }
+
     pub fn resize(self: *Window, height: u32, width: u32) !void {
         self.height = height;
         self.width = width;
@@ -122,6 +127,7 @@ const Win32Window = struct {
     fn WindowProc(self: *Window, hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) LRESULT {
         switch (msg) {
             win32wm.WM_DESTROY => {
+                self.exit = true;
                 win32wm.PostQuitMessage(0);
                 return 0;
             },
@@ -129,6 +135,18 @@ const Win32Window = struct {
                 if (wparam == @intFromEnum(win32.ui.input.keyboard_and_mouse.VK_ESCAPE)) {
                     win32wm.PostQuitMessage(0);
                 }
+                return 0;
+            },
+            win32wm.WM_SIZING => {
+                return 0;
+            },
+            win32wm.WM_ENTERSIZEMOVE => {
+                return win32wm.SendMessageW(hwnd, win32wm.WM_SETREDRAW, 0, 0);
+            },
+            win32wm.WM_EXITSIZEMOVE => {
+                return win32wm.SendMessageW(hwnd, win32wm.WM_SETREDRAW, 1, 0);
+            },
+            win32wm.WM_ERASEBKGND => {
                 return 0;
             },
             win32wm.WM_SIZE => {
@@ -154,6 +172,20 @@ const Win32Window = struct {
                 self.renderer.clearBuffer(.{ .r = 0.18, .g = 0.35, .b = 0.5, .a = 1 });
                 self.renderer.presentBuffer();
             }
+        }
+    }
+
+    pub fn pumpMessages(self: *Window) void {
+        var msg: win32wm.MSG = undefined;
+
+        while (win32wm.PeekMessageW(&msg, null, 0, 0, .{ .REMOVE = 1 }) != 0) {
+            if (msg.message == win32wm.WM_QUIT) {
+                self.exit = true;
+                return;
+            }
+
+            _ = win32wm.TranslateMessage(&msg);
+            _ = win32wm.DispatchMessageW(&msg);
         }
     }
 };
