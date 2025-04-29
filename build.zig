@@ -10,10 +10,16 @@ pub fn build(b: *std.Build) void {
     const win32 = b.dependency("zigwin32", .{});
     const win32_mod = win32.module("win32");
 
-    const vtparse = b.dependency("vtparse", .{});
+    const vtparse = b.dependency("vtparse", .{
+        .target = target,
+        .optimize = optimize,
+    });
     const vtparse_mod = vtparse.module("vtparse");
 
-    const freetype = b.dependency("zig_freetype2", .{});
+    const freetype = b.dependency("zig_freetype2", .{
+        .target = target,
+        .optimize = optimize,
+    });
     const freetype_mod = freetype.module("zig_freetype2");
 
     const exe_mod = b.createModule(.{
