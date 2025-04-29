@@ -1,22 +1,4 @@
-cbuffer ConstantBuffer : register(b0)
+float4 main(float2 pos : Position) : SV_Position
 {
-    matrix modelViewProj;
-};
-
-struct VS_INPUT {
-    float3 pos : POSITION;
-    float2 uv  : TEXCOORD0;
-};
-
-struct VS_OUTPUT {
-    float4 pos : SV_POSITION;
-    float2 uv  : TEXCOORD0;
-};
-
-VS_OUTPUT main(VS_INPUT input)
-{
-    VS_OUTPUT output;
-    output.pos = mul(modelViewProj, float4(input.pos, 1.0f));
-    output.uv = input.uv;
-    return output;
+  return float4(pos.x, pos.y, 0.0, 1.0);
 }

@@ -11,7 +11,16 @@ const vertex_shader_source = @embedFile("shaders/D3D11/vertex.hlsl");
 const pixel_shader_cso = @embedFile("shaders/D3D11/pixel.cso");
 const vertex_shader_cso = @embedFile("shaders/D3D11/vertex.cso");
 
-pub const ColorRGBA = packed struct { r: f32, g: f32, b: f32, a: f32 };
+pub const ColorRGBA = struct { r: f32, g: f32, b: f32, a: f32 };
+
+pub const Red = ColorRGBA{ .r = 1, .g = 0, .b = 0, .a = 1 };
+pub const Green = ColorRGBA{ .r = 0, .g = 1, .b = 0, .a = 1 };
+pub const Blue = ColorRGBA{ .r = 0, .g = 0, .b = 1, .a = 1 };
+pub const White = ColorRGBA{ .r = 1, .g = 1, .b = 1, .a = 1 };
+pub const Black = ColorRGBA{ .r = 0, .g = 0, .b = 0, .a = 1 };
+pub const Gray = ColorRGBA{ .r = 0.3, .g = 0.3, .b = 0.3, .a = 1 };
+
+const Vertex2D = struct { x: f32, y: f32 };
 
 const Allocator = std.mem.Allocator;
 
@@ -138,99 +147,96 @@ pub fn presentBuffer(self: *D3D11Renderer) void {
     _ = self.swap_chain.Present(1, 0);
 }
 
-pub fn glyphToTexture(self: *D3D11Renderer, glyph: freetype.Glyph) !*d3d11.ID3D11Texture2D {
-    const bitmap = &@as(freetype.c.FT_BitmapGlyph, @ptrCast(glyph.ft_glyph)).*.bitmap;
-
-    const texture_desc: d3d11.D3D11_TEXTURE2D_DESC = .{
-        .Width = @intCast(bitmap.width),
-        .Height = @intCast(bitmap.rows),
-        .MipLevels = 1,
-        .ArraySize = 1,
-        .Format = .R8_UNORM,
-        .SampleDesc = .{ .Count = 1, .Quality = 0 },
-        .BindFlags = .{ .SHADER_RESOURCE = 1 },
-        .CPUAccessFlags = .{},
-        .MiscFlags = .{},
-        .Usage = .DEFAULT,
+pub fn drawTestTriagnle(self: *D3D11Renderer) void {
+    const vertices = [_]Vertex2D{
+        .{ .x = 0, .y = 0.5 },
+        .{ .x = 0.5, .y = -0.5 },
+        .{ .x = -0.5, .y = -0.5 },
     };
 
-    const init_data: d3d11.D3D11_SUBRESOURCE_DATA = .{
-        .pSysMem = bitmap.buffer,
-        .SysMemPitch = @intCast(bitmap.pitch),
+    const stride: u32 = @sizeOf(Vertex2D);
+    const offset: u32 = 0;
+
+    const buffer_desc: d3d11.D3D11_BUFFER_DESC = .{
+        .Usage = .DEFAULT,
+        .BindFlags = .{ .VERTEX_BUFFER = 1 },
+        .ByteWidth = @sizeOf(Vertex2D) * vertices.len,
+        .StructureByteStride = @sizeOf(Vertex2D),
+        .MiscFlags = .{},
+        .CPUAccessFlags = .{},
+    };
+
+    const buffer_init_data: d3d11.D3D11_SUBRESOURCE_DATA = .{
+        .pSysMem = &vertices,
+        .SysMemPitch = 0,
         .SysMemSlicePitch = 0,
     };
 
-    var texture: ?*d3d11.ID3D11Texture2D = null;
-
-    const hresult = self.device.CreateTexture2D(&texture_desc, &init_data, @ptrCast(&texture));
-
-    if (win32.zig.FAILED(hresult))
-        win32.zig.panicHresult("CreateTexture2D", hresult);
-
-    return texture.?;
-}
-
-pub fn drawTexture(self: *D3D11Renderer, texture: *const d3d11.ID3D11Texture2D, x: u32, y: u32) !void {
-    _ = x; // autofix
-    _ = y; // autofix
-
-    const sampler_desc: d3d11.D3D11_SAMPLER_DESC = .{
-        .Filter = .MIN_MAG_MIP_LINEAR,
-        .AddressU = .WRAP,
-        .AddressV = .WRAP,
-        .AddressW = .WRAP,
-        .MipLODBias = 0,
-        .MaxAnisotropy = 1,
-        .ComparisonFunc = .NEVER,
-        .BorderColor = .{ 0.0, 0.0, 0.0, 0.0 },
-        .MinLOD = 0.0,
-        .MaxLOD = d3d11.D3D11_FLOAT32_MAX,
-    };
-
-    var sampler_state: *d3d11.ID3D11SamplerState = undefined;
-    var hresult = self.device.CreateSamplerState(&sampler_desc, &sampler_state);
+    var vertex_buffer: *d3d11.ID3D11Buffer = undefined;
+    var hresult = self.device.CreateBuffer(&buffer_desc, &buffer_init_data, &vertex_buffer);
+    defer _ = vertex_buffer.IUnknown.Release();
 
     if (win32.zig.FAILED(hresult))
-        win32.zig.panicHresult("CreateSamplerState", hresult);
+        win32.zig.panicHresult("CreateBuffer", hresult);
 
-    var srv: *d3d11.ID3D11ShaderResourceView = undefined;
-    const srv_desc: d3d11.D3D11_SHADER_RESOURCE_VIEW_DESC = .{
-        .Format = .R8_UNORM,
-        .ViewDimension = ._SRV_DIMENSION_TEXTURE2D,
-        .Anonymous = .{
-            .Texture2D = .{ .MipLevels = 1, .MostDetailedMip = 0 },
+    var input_layout: *d3d11.ID3D11InputLayout = undefined;
+    const input_layout_descs = [_]d3d11.D3D11_INPUT_ELEMENT_DESC{
+        .{
+            .SemanticName = "Position",
+            .SemanticIndex = 0,
+            .Format = .R32G32_FLOAT,
+            .InputSlot = 0,
+            .AlignedByteOffset = 0,
+            .InputSlotClass = .VERTEX_DATA,
+            .InstanceDataStepRate = 0,
         },
     };
 
-    self.context.IASetPrimitiveTopology(._PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+    hresult = self.device.CreateInputLayout(
+        &input_layout_descs,
+        input_layout_descs.len,
+        vertex_shader_cso,
+        vertex_shader_cso.len,
+        &input_layout,
+    );
 
-    hresult = self.device.CreateShaderResourceView(@constCast(@ptrCast(texture)), &srv_desc, &srv);
     if (win32.zig.FAILED(hresult))
-        win32.zig.panicHresult("CreateShaderResourceView", hresult);
+        win32.zig.panicHresult("CreateInputLayout", hresult);
 
-    self.context.VSSetShader(self.vertex_shader, null, 0);
+    defer _ = input_layout.IUnknown.Release();
+
+    const view_port: d3d11.D3D11_VIEWPORT = .{
+        .Height = 400,
+        .Width = 400,
+        .MaxDepth = 1,
+        .MinDepth = 0,
+        .TopLeftX = 0,
+        .TopLeftY = 0,
+    };
+    self.context.RSSetViewports(1, @ptrCast(&view_port));
+
+    self.context.IASetInputLayout(input_layout);
 
     self.context.PSSetShader(self.pixel_shader, null, 0);
+    self.context.VSSetShader(self.vertex_shader, null, 0);
 
-    self.context.PSSetShaderResources(0, 1, @ptrCast(&srv));
-    self.context.PSSetSamplers(0, 1, @ptrCast(&sampler_state));
-    self.context.Draw(4, 0);
+    self.context.OMSetRenderTargets(1, @ptrCast(&self.render_target_view), null);
+
+    self.context.IASetVertexBuffers(
+        0,
+        1,
+        @ptrCast(&vertex_buffer),
+        @ptrCast(&stride),
+        @ptrCast(&offset),
+    );
+
+    self.context.IASetPrimitiveTopology(._PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+    self.context.Draw(3, 0);
 }
 
-test "test glyph rendering" {
-    const allocator = std.heap.page_allocator;
-
-    var ft_library = try freetype.Library.init(allocator);
-    defer ft_library.deinit();
-
-    const face = ft_library.face("C:\\windows\\Fonts\\arial.ttf", 32) catch |e| {
-        std.log.err("freetype {}", .{e});
-        return e;
-    };
-    defer face.deinit();
-
-    const glyph = try face.getGlyph('a');
-    defer glyph.deinit();
+test "test triangle rendering" {
+    const allocator = std.testing.allocator;
 
     var window: @import("../window.zig").Window = .{
         .height = 400,
@@ -243,12 +249,26 @@ test "test glyph rendering" {
 
     const renderer = &window.renderer;
 
-    const texture = try renderer.glyphToTexture(glyph);
-
     while (!window.exit) {
         window.pumpMessages();
-        renderer.clearBuffer(.{ .r = 0.3, .g = 0.3, .b = 0.3, .a = 1 });
-        try renderer.drawTexture(texture, 0, 0);
+        renderer.clearBuffer(Black);
+        renderer.drawTestTriagnle();
         renderer.presentBuffer();
     }
+}
+
+test "test glyph rendering" {
+    // const allocator = std.testing.allocator;
+    //
+    // var ft_library = try freetype.Library.init(allocator);
+    // defer ft_library.deinit();
+    //
+    // const face = ft_library.face("C:\\windows\\Fonts\\arial.ttf", 32) catch |e| {
+    //     std.log.err("freetype {}", .{e});
+    //     return e;
+    // };
+    // defer face.deinit();
+    //
+    // const glyph = try face.getGlyph('a');
+    // defer glyph.deinit();
 }
