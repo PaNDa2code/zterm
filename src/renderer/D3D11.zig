@@ -8,8 +8,8 @@ const D3D11Renderer = @This();
 const pixel_shader_source = @embedFile("shaders/D3D11/pixel.hlsl");
 const vertex_shader_source = @embedFile("shaders/D3D11/vertex.hlsl");
 
-const pixel_shader_cso = @embedFile("shaders/D3D11/pixel.cso");
-const vertex_shader_cso = @embedFile("shaders/D3D11/vertex.cso");
+// const pixel_shader_cso = @embedFile("shaders/D3D11/pixel.cso");
+// const vertex_shader_cso = @embedFile("shaders/D3D11/vertex.cso");
 
 pub const ColorRGBA = struct { r: f32, g: f32, b: f32, a: f32 };
 
@@ -28,6 +28,9 @@ const win32 = @import("win32");
 const foundation = win32.foundation;
 const d3d11 = win32.graphics.direct3d11;
 const dxgi = win32.graphics.dxgi;
+const d3d = win32.graphics.direct3d;
+const fxc = win32.graphics.direct3d.fxc;
+const dxc = win32.graphics.direct3d.dxc;
 const hlsl = win32.graphics.hlsl;
 
 const HWND = foundation.HWND;
@@ -38,6 +41,7 @@ const ID3D11VertexShader = d3d11.ID3D11VertexShader;
 const ID3D11PixelShader = d3d11.ID3D11PixelShader;
 const IDXGIInfoQueue = dxgi.IDXGIInfoQueue;
 const IDXGISwapChain = dxgi.IDXGISwapChain;
+const ID3DBlob = d3d.ID3DBlob;
 
 device: *ID3D11Device = undefined,
 context: *ID3D11DeviceContext = undefined,
@@ -45,6 +49,9 @@ swap_chain: *IDXGISwapChain = undefined,
 render_target_view: *ID3D11RenderTargetView = undefined,
 vertex_shader: *ID3D11VertexShader = undefined,
 pixel_shader: *ID3D11PixelShader = undefined,
+
+vertex_shader_blob: *ID3DBlob = undefined,
+pixel_shader_blob: *ID3DBlob = undefined,
 
 // TODO: Replace manual HRESULT checks with proper Zig error unions and error sets when supported.
 pub fn init(hwnd: HWND) !D3D11Renderer {
@@ -109,19 +116,36 @@ pub fn init(hwnd: HWND) !D3D11Renderer {
     if (win32.zig.FAILED(hresult))
         win32.zig.panicHresult("CreateRenderTargetView", hresult);
 
-    hresult = self.device.CreateVertexShader(
-        vertex_shader_cso,
-        vertex_shader_cso.len,
+    self.compileShaders();
+
+    return self;
+}
+
+pub fn compileShaders(self: *D3D11Renderer) void {
+    var hresult = fxc.D3DCreateBlob(vertex_shader_source.len, @ptrCast(&self.vertex_shader_blob));
+    if (win32.zig.FAILED(hresult))
+        win32.zig.panicHresult("D3DCreateBlob", hresult);
+
+    hresult = fxc.D3DCompile(
+        pixel_shader_source,
+        pixel_shader_source.len,
         null,
-        &self.vertex_shader,
+        null,
+        null,
+        "main",
+        "ps_5_0",
+        fxc.D3DCOMPILE_DEBUG,
+        0,
+        @ptrCast(&self.pixel_shader_blob),
+        null,
     );
 
     if (win32.zig.FAILED(hresult))
-        win32.zig.panicHresult("CreateVertexShader", hresult);
+        win32.zig.panicHresult("D3DCompile", hresult);
 
     hresult = self.device.CreatePixelShader(
-        pixel_shader_cso,
-        pixel_shader_cso.len,
+        @ptrCast(self.pixel_shader_blob.GetBufferPointer()),
+        self.pixel_shader_blob.GetBufferSize(),
         null,
         &self.pixel_shader,
     );
@@ -129,7 +153,32 @@ pub fn init(hwnd: HWND) !D3D11Renderer {
     if (win32.zig.FAILED(hresult))
         win32.zig.panicHresult("CreatePixelShader", hresult);
 
-    return self;
+    hresult = fxc.D3DCompile(
+        vertex_shader_source,
+        vertex_shader_source.len,
+        null,
+        null,
+        null,
+        "main",
+        "vs_5_0",
+        fxc.D3DCOMPILE_DEBUG,
+        0,
+        @ptrCast(&self.vertex_shader_blob),
+        null,
+    );
+
+    if (win32.zig.FAILED(hresult))
+        win32.zig.panicHresult("D3DCompile", hresult);
+
+    hresult = self.device.CreateVertexShader(
+        @ptrCast(self.vertex_shader_blob.GetBufferPointer()),
+        self.vertex_shader_blob.GetBufferSize(),
+        null,
+        &self.vertex_shader,
+    );
+
+    if (win32.zig.FAILED(hresult))
+        win32.zig.panicHresult("CreateVertexShader", hresult);
 }
 
 pub fn deinit(self: *D3D11Renderer) void {
@@ -137,6 +186,10 @@ pub fn deinit(self: *D3D11Renderer) void {
     _ = self.context.IUnknown.Release();
     _ = self.device.IUnknown.Release();
     _ = self.render_target_view.IUnknown.Release();
+    _ = self.vertex_shader.IUnknown.Release();
+    _ = self.pixel_shader.IUnknown.Release();
+    _ = self.vertex_shader_blob.IUnknown.Release();
+    _ = self.pixel_shader_blob.IUnknown.Release();
 }
 
 pub fn clearBuffer(self: *D3D11Renderer, color: ColorRGBA) void {
@@ -195,8 +248,8 @@ pub fn drawTestTriagnle(self: *D3D11Renderer) void {
     hresult = self.device.CreateInputLayout(
         &input_layout_descs,
         input_layout_descs.len,
-        vertex_shader_cso,
-        vertex_shader_cso.len,
+        @ptrCast(self.vertex_shader_blob.GetBufferPointer()),
+        self.vertex_shader_blob.GetBufferSize(),
         &input_layout,
     );
 
