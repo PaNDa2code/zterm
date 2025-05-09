@@ -3,7 +3,7 @@ const builtin = @import("builtin");
 
 const mode = builtin.mode;
 
-const DebugErrorInfo = @This();
+const ErrDebugInfo = @This();
 
 pub const Src = struct {
     file: []const u8,
@@ -15,7 +15,7 @@ caller_address: usize,
 error_code: ?u32,
 error_tag: ?anyerror,
 
-pub fn create(error_code: ?u32, error_tag: ?anyerror, depth: usize) DebugErrorInfo {
+pub fn create(error_code: ?u32, error_tag: ?anyerror, depth: usize) ErrDebugInfo {
     const stack_trace: *std.builtin.StackTrace = @errorReturnTrace() orelse undefined;
 
     std.debug.captureStackTrace(@returnAddress(), stack_trace);
@@ -28,7 +28,7 @@ pub fn create(error_code: ?u32, error_tag: ?anyerror, depth: usize) DebugErrorIn
     };
 }
 
-pub fn src(self: *const DebugErrorInfo) ?Src {
+pub fn src(self: *const ErrDebugInfo) ?Src {
     const debug_info = std.debug.getSelfDebugInfo() catch unreachable;
 
     const allocator = debug_info.allocator;
@@ -46,7 +46,7 @@ pub fn src(self: *const DebugErrorInfo) ?Src {
     };
 }
 
-pub fn what(self: *const DebugErrorInfo, writer: std.io.AnyWriter) !void {
+pub fn what(self: *const ErrDebugInfo, writer: std.io.AnyWriter) !void {
     const source = self.src();
 
     if (self.error_tag) |tag| {
@@ -72,7 +72,7 @@ fn func1() !void {
     const writer = vector.writer().any();
 
     func2() catch |err| {
-        const base = DebugErrorInfo.create(1, err, 0);
+        const base = ErrDebugInfo.create(1, err, 0);
         base.what(writer) catch unreachable;
     };
 
