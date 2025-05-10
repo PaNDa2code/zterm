@@ -1,9 +1,9 @@
 .{
-    .name = .cross_pty,
+    .name = .zterm,
 
     .version = "0.0.0",
 
-    .fingerprint = 0x86bde4900a50e257,
+    .fingerprint = 0xf10b37e2a9e36b31,
 
     .minimum_zig_version = "0.14.0",
 
