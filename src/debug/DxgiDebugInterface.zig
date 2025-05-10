@@ -90,4 +90,6 @@ pub fn DxgiCheckHresult(self: *DxgiDebugInterface, hresult: i32) !void {
 
     self.base = HresultDebugInfo.create(hresult, 2);
     self.messageBox();
+
+    return error.DxgiHresultError;
 }
