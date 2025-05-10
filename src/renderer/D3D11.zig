@@ -8,9 +8,6 @@ const D3D11Renderer = @This();
 const pixel_shader_source = @embedFile("shaders/D3D11/pixel.hlsl");
 const vertex_shader_source = @embedFile("shaders/D3D11/vertex.hlsl");
 
-// const pixel_shader_cso = @embedFile("shaders/D3D11/pixel.cso");
-// const vertex_shader_cso = @embedFile("shaders/D3D11/vertex.cso");
-
 pub const ColorRGBA = struct { r: f32, g: f32, b: f32, a: f32 };
 
 pub const Red = ColorRGBA{ .r = 1, .g = 0, .b = 0, .a = 1 };
@@ -33,6 +30,8 @@ const fxc = win32.graphics.direct3d.fxc;
 const dxc = win32.graphics.direct3d.dxc;
 const hlsl = win32.graphics.hlsl;
 
+const DxgiDebugInterface = @import("../debug/DxgiDebugInterface.zig");
+
 const HWND = foundation.HWND;
 const ID3D11Device = d3d11.ID3D11Device;
 const ID3D11DeviceContext = d3d11.ID3D11DeviceContext;
@@ -52,6 +51,8 @@ pixel_shader: *ID3D11PixelShader = undefined,
 
 vertex_shader_blob: *ID3DBlob = undefined,
 pixel_shader_blob: *ID3DBlob = undefined,
+
+dxdi: if (builtin.mode == .Debug) DxgiDebugInterface else void = undefined,
 
 // TODO: Replace manual HRESULT checks with proper Zig error unions and error sets when supported.
 pub fn init(hwnd: HWND) !D3D11Renderer {
@@ -80,11 +81,16 @@ pub fn init(hwnd: HWND) !D3D11Renderer {
 
     var hresult: i32 = 0;
 
+
+    self.dxdi = try DxgiDebugInterface.init(@ptrCast(self.device));
+    self.dxdi.set();
+    errdefer self.dxdi.deinit();
+
     hresult = d3d11.D3D11CreateDeviceAndSwapChain(
         null,
         .HARDWARE,
         null,
-        .{},
+        .{ .DEBUG = if (builtin.mode == .Debug) 1 else 0 },
         null,
         0,
         d3d11.D3D11_SDK_VERSION,
@@ -95,15 +101,19 @@ pub fn init(hwnd: HWND) !D3D11Renderer {
         &self.context,
     );
 
-    if (win32.zig.FAILED(hresult))
-        win32.zig.panicHresult("D3D11CreateDeviceAndSwapChain", hresult);
+    try self.dxdi.DxgiCheckHresult(hresult);
+
+    errdefer {
+        _ = self.swap_chain.IUnknown.Release();
+        _ = self.context.IUnknown.Release();
+        _ = self.device.IUnknown.Release();
+    }
 
     var backBuffer: *d3d11.ID3D11Resource = undefined;
 
     hresult = self.swap_chain.GetBuffer(0, d3d11.IID_ID3D11Resource, @ptrCast(&backBuffer));
 
-    if (win32.zig.FAILED(hresult))
-        win32.zig.panicHresult("GetBuffer", hresult);
+    try self.dxdi.DxgiCheckHresult(hresult);
 
     defer _ = backBuffer.IUnknown.Release();
 
@@ -113,18 +123,25 @@ pub fn init(hwnd: HWND) !D3D11Renderer {
         &self.render_target_view,
     );
 
-    if (win32.zig.FAILED(hresult))
-        win32.zig.panicHresult("CreateRenderTargetView", hresult);
+    try self.dxdi.DxgiCheckHresult(hresult);
 
-    self.compileShaders();
+    errdefer _ = self.render_target_view.IUnknown.Release();
+
+    try self.compileShaders();
 
     return self;
 }
 
-pub fn compileShaders(self: *D3D11Renderer) void {
+pub fn compileShaders(self: *D3D11Renderer) !void {
     var hresult = fxc.D3DCreateBlob(vertex_shader_source.len, @ptrCast(&self.vertex_shader_blob));
-    if (win32.zig.FAILED(hresult))
-        win32.zig.panicHresult("D3DCreateBlob", hresult);
+    try self.dxdi.DxgiCheckHresult(hresult);
+    errdefer _ = self.vertex_shader_blob.IUnknown.Release();
+
+    hresult = fxc.D3DCreateBlob(pixel_shader_source.len, @ptrCast(&self.pixel_shader_blob));
+
+    try self.dxdi.DxgiCheckHresult(hresult);
+
+    errdefer _ = self.pixel_shader_blob.IUnknown.Release();
 
     hresult = fxc.D3DCompile(
         pixel_shader_source,
@@ -140,8 +157,7 @@ pub fn compileShaders(self: *D3D11Renderer) void {
         null,
     );
 
-    if (win32.zig.FAILED(hresult))
-        win32.zig.panicHresult("D3DCompile", hresult);
+    try self.dxdi.DxgiCheckHresult(hresult);
 
     hresult = self.device.CreatePixelShader(
         @ptrCast(self.pixel_shader_blob.GetBufferPointer()),
@@ -150,8 +166,9 @@ pub fn compileShaders(self: *D3D11Renderer) void {
         &self.pixel_shader,
     );
 
-    if (win32.zig.FAILED(hresult))
-        win32.zig.panicHresult("CreatePixelShader", hresult);
+    try self.dxdi.DxgiCheckHresult(hresult);
+
+    errdefer _ = self.pixel_shader.IUnknown.Release();
 
     hresult = fxc.D3DCompile(
         vertex_shader_source,
@@ -167,8 +184,7 @@ pub fn compileShaders(self: *D3D11Renderer) void {
         null,
     );
 
-    if (win32.zig.FAILED(hresult))
-        win32.zig.panicHresult("D3DCompile", hresult);
+    try self.dxdi.DxgiCheckHresult(hresult);
 
     hresult = self.device.CreateVertexShader(
         @ptrCast(self.vertex_shader_blob.GetBufferPointer()),
@@ -177,8 +193,9 @@ pub fn compileShaders(self: *D3D11Renderer) void {
         &self.vertex_shader,
     );
 
-    if (win32.zig.FAILED(hresult))
-        win32.zig.panicHresult("CreateVertexShader", hresult);
+    try self.dxdi.DxgiCheckHresult(hresult);
+
+    // errdefer _ = self.vertex_shader.IUnknown.Release();
 }
 
 pub fn deinit(self: *D3D11Renderer) void {
@@ -229,8 +246,7 @@ pub fn drawTestTriagnle(self: *D3D11Renderer) void {
     var hresult = self.device.CreateBuffer(&buffer_desc, &buffer_init_data, &vertex_buffer);
     defer _ = vertex_buffer.IUnknown.Release();
 
-    if (win32.zig.FAILED(hresult))
-        win32.zig.panicHresult("CreateBuffer", hresult);
+    self.dxdi.DxgiCheckHresult(hresult) catch return;
 
     var input_layout: *d3d11.ID3D11InputLayout = undefined;
     const input_layout_descs = [_]d3d11.D3D11_INPUT_ELEMENT_DESC{
@@ -253,8 +269,7 @@ pub fn drawTestTriagnle(self: *D3D11Renderer) void {
         &input_layout,
     );
 
-    if (win32.zig.FAILED(hresult))
-        win32.zig.panicHresult("CreateInputLayout", hresult);
+    self.dxdi.DxgiCheckHresult(hresult) catch return;
 
     defer _ = input_layout.IUnknown.Release();
 
