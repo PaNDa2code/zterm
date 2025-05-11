@@ -5,8 +5,8 @@ const freetype = @import("freetype");
 
 const D3D11Renderer = @This();
 
-const pixel_shader_source = @embedFile("shaders/D3D11/pixel.hlsl");
-const vertex_shader_source = @embedFile("shaders/D3D11/vertex.hlsl");
+const pixel_shader_source = @embedFile("shaders/pixel.hlsl");
+const vertex_shader_source = @embedFile("shaders/vertex.hlsl");
 
 pub const ColorRGBA = struct { r: f32, g: f32, b: f32, a: f32 };
 
@@ -30,7 +30,7 @@ const fxc = win32.graphics.direct3d.fxc;
 const dxc = win32.graphics.direct3d.dxc;
 const hlsl = win32.graphics.hlsl;
 
-const DxgiDebugInterface = @import("../debug/DxgiDebugInterface.zig");
+const DxgiDebugInterface = @import("DxgiDebugInterface.zig");
 
 const HWND = foundation.HWND;
 const ID3D11Device = d3d11.ID3D11Device;
@@ -306,7 +306,7 @@ pub fn drawTestTriagnle(self: *D3D11Renderer) void {
 test "test triangle rendering" {
     const allocator = std.testing.allocator;
 
-    var window: @import("../window.zig").Window = .{
+    var window: @import("../../window.zig").Window = .{
         .height = 400,
         .width = 400,
         .title = "test drawTexture",

@@ -27,7 +27,7 @@ const Win32Window = struct {
     const WPARAM = win32fnd.WPARAM;
     const LPARAM = win32fnd.LPARAM;
 
-    const D3D11Renderer = @import("renderer/D3D11.zig");
+    const D3D11Renderer = @import("renderer/d3d11/D3D11.zig");
 
     exit: bool = false,
     hwnd: HWND = undefined,
