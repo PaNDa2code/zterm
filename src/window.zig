@@ -27,14 +27,15 @@ const Win32Window = struct {
     const WPARAM = win32fnd.WPARAM;
     const LPARAM = win32fnd.LPARAM;
 
-    const D3D11Renderer = @import("renderer/d3d11/D3D11.zig");
+    // const D3D11Renderer = @import("renderer/d3d11/D3D11.zig");
+    const OpenGLRenderer = @import("renderer/opengl/OpenGl.zig");
 
     exit: bool = false,
     hwnd: HWND = undefined,
     title: []const u8,
     height: u32,
     width: u32,
-    renderer: D3D11Renderer = undefined,
+    renderer: OpenGLRenderer = undefined,
     allocator: Allocator = undefined,
 
     pub fn new(allocator: Allocator, title: []const u8, height: u32, width: u32) Window {
@@ -56,6 +57,7 @@ const Win32Window = struct {
         window_class.lpszClassName = class_name;
         window_class.hInstance = win32loader.GetModuleHandleW(null);
         window_class.lpfnWndProc = &WindowProcSetup;
+        window_class.style = .{ .OWNDC = 1, .VREDRAW = 1, .HREDRAW = 1 };
 
         _ = win32wm.RegisterClassW(&window_class);
 
@@ -93,10 +95,11 @@ const Win32Window = struct {
             @sizeOf(u32),
         );
 
-        _ = win32wm.ShowWindow(hwnd, .{ .SHOWNORMAL = 1 });
 
-        self.renderer = try D3D11Renderer.init(hwnd);
+        self.renderer = try OpenGLRenderer.init(hwnd);
         self.hwnd = hwnd;
+
+        _ = win32wm.ShowWindow(hwnd, .{ .SHOWNORMAL = 1 });
     }
 
     pub fn deinit(self: *Window) void {

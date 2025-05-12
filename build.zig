@@ -22,6 +22,15 @@ pub fn build(b: *std.Build) void {
     });
     const freetype_mod = freetype.module("zig_freetype2");
 
+    const zigglgen = @import("zigglgen");
+
+    const gl_bindings = zigglgen.generateBindingsModule(b, .{
+        .api = .gl,
+        .version = .@"4.0",
+        .profile = .core,
+        .extensions = &.{},
+    });
+
     const exe_mod = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
         .target = target,
@@ -32,6 +41,7 @@ pub fn build(b: *std.Build) void {
     exe_mod.addImport("openpty", openpty_mod);
     exe_mod.addImport("vtparse", vtparse_mod);
     exe_mod.addImport("freetype", freetype_mod);
+    exe_mod.addImport("gl", gl_bindings);
 
     const exe = b.addExecutable(.{
         .name = "cross_pty",
