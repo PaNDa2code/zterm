@@ -27,15 +27,14 @@ const Win32Window = struct {
     const WPARAM = win32fnd.WPARAM;
     const LPARAM = win32fnd.LPARAM;
 
-    // const D3D11Renderer = @import("renderer/d3d11/D3D11.zig");
-    const OpenGLRenderer = @import("renderer/opengl/OpenGl.zig");
+    const RendererApi = @import("renderer/Api.zig");
 
     exit: bool = false,
     hwnd: HWND = undefined,
     title: []const u8,
     height: u32,
     width: u32,
-    renderer: OpenGLRenderer = undefined,
+    renderer: RendererApi = undefined,
     allocator: Allocator = undefined,
 
     pub fn new(allocator: Allocator, title: []const u8, height: u32, width: u32) Window {
@@ -96,7 +95,7 @@ const Win32Window = struct {
         );
 
 
-        self.renderer = try OpenGLRenderer.init(hwnd);
+        self.renderer = try RendererApi.init(hwnd);
         self.hwnd = hwnd;
 
         _ = win32wm.ShowWindow(hwnd, .{ .SHOWNORMAL = 1 });
