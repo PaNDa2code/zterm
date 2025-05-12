@@ -4,6 +4,20 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    const options = b.addOptions();
+
+    const options_desc = .{
+        .{ RenderBackend, "render-backend", "Select the graphics backend to use for rendering", .OpenGL },
+    };
+
+    inline for (@typeInfo(@TypeOf(options_desc)).@"struct".fields) |field| {
+        const T = @field(options_desc, field.name).@"0";
+        const name = @field(options_desc, field.name).@"1";
+        const description = @field(options_desc, field.name).@"2";
+        const defult_value = @field(options_desc, field.name).@"3";
+        options.addOption(T, name, b.option(T, name, description) orelse defult_value);
+    }
+
     const zig_openpty = b.dependency("zig_openpty", .{});
     const openpty_mod = zig_openpty.module("openpty");
 
@@ -22,9 +36,7 @@ pub fn build(b: *std.Build) void {
     });
     const freetype_mod = freetype.module("zig_freetype2");
 
-    const zigglgen = @import("zigglgen");
-
-    const gl_bindings = zigglgen.generateBindingsModule(b, .{
+    const gl_bindings = @import("zigglgen").generateBindingsModule(b, .{
         .api = .gl,
         .version = .@"4.0",
         .profile = .core,
@@ -50,6 +62,7 @@ pub fn build(b: *std.Build) void {
     });
 
     exe.link_gc_sections = true;
+    exe.root_module.addOptions("config", options);
 
     b.installArtifact(exe);
 
@@ -75,3 +88,9 @@ pub fn build(b: *std.Build) void {
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&run_exe_unit_tests.step);
 }
+
+const RenderBackend = enum {
+    D3D11,
+    OpenGL,
+    Vulkan,
+};
