@@ -27,7 +27,7 @@ test "test all" {
     std.testing.refAllDecls(Window);
     std.testing.refAllDecls(freetype);
     std.testing.refAllDecls(@import("DynamicLibrary.zig"));
-    std.testing.refAllDecls(@import("renderer/opengl/OpenGl.zig"));
+    std.testing.refAllDecls(@import("renderer/opengl/OpenGL.zig"));
 }
 
 pub const UNICODE = true;
