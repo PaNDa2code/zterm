@@ -39,34 +39,20 @@ stdin: ?File = null,
 stdout: ?File = null,
 stderr: ?File = null,
 
-pub fn start(self: *ChildProcess, allocator: Allocator, pty: ?*Pty) !void {
-    var arina = std.heap.ArenaAllocator.init(allocator);
-    defer arina.deinit();
 
-    const arina_allocator = arina.allocator();
-
-    return switch (builtin.os.tag) {
-        .windows => self.startWindows(arina_allocator, pty),
-        .linux, .macos => self.startPosix(arina_allocator, pty),
-        else => @compileError("os is not supported"),
-    };
-}
-
-pub fn terminate(self: *ChildProcess) void {
-    switch (builtin.os.tag) {
-        .windows => self.terminateWindows(),
-        .linux, .macos => self.terminatePosix(),
-        else => @compileError("os is not supported"),
-    }
-}
-
-pub fn wait(self: *ChildProcess) !void {
-    return switch (builtin.os.tag) {
-        .windows => self.waitWindows(),
-        .linux, .macos => self.waitPosix(),
-        else => @compileError("os is not supported"),
-    };
-}
+pub usingnamespace switch (os) {
+    .windows => struct {
+        pub const start = startWindows;
+        pub const terminate = terminateWindows;
+        pub const wait = waitWindows;
+    },
+    .linux, .macos => struct {
+        pub const start = startPosix;
+        pub const terminate = terminatePosix;
+        pub const wait = waitPosix;
+    },
+    else => {},
+};
 
 fn startWindows(self: *ChildProcess, arina: Allocator, pty: ?*Pty) !void {
     var startup_info_ex = std.mem.zeroes(win32thread.STARTUPINFOEXW);
@@ -266,6 +252,9 @@ test "test ChildProcess with pty" {
         .args = &.{},
     };
 
-    try child.start(std.testing.allocator, &pty);
+    var arina = std.heap.ArenaAllocator.init(std.testing.allocator);
+    defer arina.deinit();
+    try child.start(arina.allocator(), &pty);
+    // try child.wait();
     defer child.terminate();
 }
