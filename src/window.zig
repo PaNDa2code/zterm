@@ -27,7 +27,7 @@ const Win32Window = struct {
     const WPARAM = win32fnd.WPARAM;
     const LPARAM = win32fnd.LPARAM;
 
-    const RendererApi = @import("renderer/Api.zig");
+    const RendererApi = @import("renderer/root.zig").Renderer;
 
     exit: bool = false,
     hwnd: HWND = undefined,
