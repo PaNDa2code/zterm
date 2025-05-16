@@ -94,7 +94,6 @@ const Win32Window = struct {
             @sizeOf(u32),
         );
 
-
         self.renderer = try RendererApi.init(hwnd);
         self.hwnd = hwnd;
 
@@ -193,16 +192,70 @@ const Win32Window = struct {
 };
 
 const X11Window = struct {
+    const x11 = @cImport({
+        @cInclude("X11/Xlib.h");
+    });
+
     socket: i32 = undefined,
     title: []const u8,
     height: u32,
     width: u32,
     allocator: Allocator = undefined,
+    display: *x11.Display = undefined,
+    s: c_int = undefined,
+    w: c_ulong = undefined,
+
     pub fn init(self: *X11Window, allocator: Allocator) !void {
         self.allocator = allocator;
+        const display = x11.XOpenDisplay(null);
+        const screen = x11.DefaultScreen(display);
+        const window = x11.XCreateSimpleWindow(
+            display,
+            x11.RootWindow(display, screen),
+            10,
+            10,
+            self.width,
+            self.height,
+            1,
+            x11.BlackPixel(display, screen),
+            x11.WhitePixel(display, screen),
+        );
+
+        _ = x11.XSelectInput(display, window, x11.ExposureMask | x11.KeyPressMask);
+        _ = x11.XMapWindow(display, window);
+
+        self.display = display.?;
+        self.s = screen;
+        self.w = window;
     }
 
     pub fn messageLoop(self: *X11Window) void {
-        _ = self;
+        var event: x11.XEvent = undefined;
+        const message = "HelloWorld";
+        while (true) {
+            _ = x11.XNextEvent(self.display, &event);
+            if (event.type == x11.Expose) {
+                _ = x11.XFillRectangle(
+                    self.display,
+                    self.w,
+                    x11.DefaultGC(self.display, self.s),
+                    20,
+                    20,
+                    10,
+                    10,
+                );
+                _ = x11.XDrawString(
+                    self.display,
+                    self.w,
+                    x11.DefaultGC(self.display, self.s),
+                    10,
+                    50,
+                    message,
+                    message.len,
+                );
+            }
+            if (event.type == x11.KeyPress)
+                break;
+        }
     }
 };
