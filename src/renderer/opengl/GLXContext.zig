@@ -40,7 +40,7 @@ pub fn createOpenGLContext(window: *Window) !OpenGLContext {
     const glXSwapBuffers: PFNGLXSWAPBUFFERSPROC = @ptrCast(glXGetProcAddress("glXSwapBuffers"));
 
     return .{
-        .display = display,
+        .display = @ptrCast(display),
         .drawable = window.w,
         .context = gl_context,
         .glXSwapIntervalsEXT = glXSwapIntervalsEXT,

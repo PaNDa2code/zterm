@@ -46,8 +46,8 @@ const Win32Window = struct {
         };
     }
 
-    pub fn init(self: *Window, allocator: Allocator) !void {
-        self.allocator = allocator;
+    pub fn open(self: *Window) !void {
+        const allocator = self.allocator;
 
         const class_name = try utf8ToUtf16LeAllocZ(allocator, self.title);
         defer allocator.free(class_name);
@@ -101,7 +101,7 @@ const Win32Window = struct {
         _ = win32wm.ShowWindow(hwnd, .{ .SHOWNORMAL = 1 });
     }
 
-    pub fn deinit(self: *Window) void {
+    pub fn close(self: *Window) void {
         self.renderer.deinit();
     }
 
@@ -195,6 +195,7 @@ const Win32Window = struct {
 const X11Window = struct {
     const x11 = @cImport({
         @cInclude("X11/Xlib.h");
+        @cInclude("X11/keysym.h");
     });
 
     const RendererApi = @import("renderer/root.zig").Renderer;
@@ -209,8 +210,16 @@ const X11Window = struct {
     w: c_ulong = undefined,
     renderer: RendererApi = undefined,
 
-    pub fn init(self: *X11Window, allocator: Allocator) !void {
-        self.allocator = allocator;
+    pub fn new(allocator: Allocator, title: []const u8, height: u32, width: u32) Window {
+        return .{
+            .allocator = allocator,
+            .title = title,
+            .height = height,
+            .width = width,
+        };
+    }
+
+    pub fn open(self: *Window) !void {
         const display = x11.XOpenDisplay(null);
         const screen = x11.DefaultScreen(display);
 
@@ -219,9 +228,15 @@ const X11Window = struct {
 
         // x11 window is created inside opengl context creator
         self.renderer = try RendererApi.init(self);
+
+        const name = try std.fmt.allocPrintZ(self.allocator, "{s}", .{self.title});
+        _ = x11.XStoreName(@ptrCast(display), self.w, name.ptr);
+        self.allocator.free(name);
     }
 
-    pub fn messageLoop(self: *X11Window) void {
+    pub fn messageLoop(self: *Window) void {
+        var wm_delete_window = x11.XInternAtom(@ptrCast(self.display), "WM_DELETE_WINDOW", 0);
+        _ = x11.XSetWMProtocols(@ptrCast(self.display), self.w, &wm_delete_window, 1);
         var event: x11.XEvent = undefined;
         while (true) {
             _ = x11.XNextEvent(self.display, &event);
@@ -229,9 +244,18 @@ const X11Window = struct {
                 self.renderer.clearBuffer(.{ .r = 0.18, .g = 0.35, .b = 0.5, .a = 1 });
                 self.renderer.presentBuffer();
             }
-            if (event.type == x11.KeyPress)
+
+            if (event.type == x11.KeyPress and
+                x11.XLookupKeysym(@constCast(&event.xkey), 0) == x11.XK_Escape)
+                break;
+
+            if (event.type == x11.ClientMessage and
+                event.xclient.data.l[0] == wm_delete_window)
                 break;
         }
+    }
+
+    pub fn close(self: *Window) void {
         _ = x11.XDestroyWindow(@ptrCast(self.display), self.w);
     }
 };

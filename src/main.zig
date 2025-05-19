@@ -15,8 +15,10 @@ pub fn main() !void {
     const ft_library = try freetype.Library.init(allocator);
     defer ft_library.deinit();
 
-    var window = Window{ .height = 600, .width = 800, .title = "HelloWorld" };
-    try window.init(allocator);
+    var window = Window.new(allocator, "zterm: " ++ @tagName(config.@"render-backend"), 600, 800);
+    try window.open();
+    defer window.close();
+
     window.messageLoop();
 }
 
