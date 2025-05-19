@@ -1,30 +1,9 @@
-const std = @import("std");
-const gl = @import("gl");
+device_context: HDC,
+opengl_rendering_context: HGLRC,
+window_handle: HWND,
 
-const win32 = @import("win32");
-const L = std.unicode.wtf8ToWtf16LeStringLiteral;
-const windows = win32.ui.windows_and_messaging;
-const open_gl = win32.graphics.open_gl;
-const lib_loader = win32.system.library_loader;
-const gdi = win32.graphics.gdi;
-
-const PFNWGLCHOOSEPIXELFORMATARBPROC = *const fn (
-    hdc: gdi.HDC,
-    piAttribIList: ?[*]const i32,
-    pfAttribFList: ?[*]const f32,
-    nMaxFormats: u32,
-    piFormats: ?[*]i32,
-    nNumFormats: ?*u32,
-) callconv(std.os.windows.WINAPI) i32;
-
-const PFNWGLCREATECONTEXTATTRIBSARBPROC = *const fn (
-    hDC: gdi.HDC,
-    hShareContext: ?win32.graphics.open_gl.HGLRC,
-    attribList: ?[*]const i32,
-) callconv(std.os.windows.WINAPI) ?win32.graphics.open_gl.HGLRC;
-
-pub fn createOpenGLContextWin(hwnd: win32.foundation.HWND) !gdi.HDC {
-    const dummy_window_class_name = L("Core");
+pub fn createOpenGLContext(window: *Window) !OpenGLContext {
+    const dummy_window_class_name = std.unicode.wtf8ToWtf16LeStringLiteral("Core");
     const dummy_window_class = std.mem.zeroInit(windows.WNDCLASSW, .{
         .lpszClassName = dummy_window_class_name,
         .style = .{ .OWNDC = 1, .VREDRAW = 1, .HREDRAW = 1 },
@@ -37,7 +16,7 @@ pub fn createOpenGLContextWin(hwnd: win32.foundation.HWND) !gdi.HDC {
     const dummy_window = windows.CreateWindowExW(
         .{},
         dummy_window_class_name,
-        L("FakeWindow"),
+        std.unicode.wtf8ToWtf16LeStringLiteral("FakeWindow"),
         .{ .CLIPSIBLINGS = 1, .CLIPCHILDREN = 1 },
         0,
         0,
@@ -48,7 +27,6 @@ pub fn createOpenGLContextWin(hwnd: win32.foundation.HWND) !gdi.HDC {
         dummy_window_class.hInstance,
         null,
     );
-
 
     const dummy_dc = gdi.GetDC(dummy_window);
 
@@ -106,7 +84,7 @@ pub fn createOpenGLContextWin(hwnd: win32.foundation.HWND) !gdi.HDC {
     var pixel_format_id: i32 = 0;
     var num_formats: u32 = 0;
 
-    const dc = gdi.GetDC(hwnd) orelse return error.GetDC;
+    const dc = gdi.GetDC(window.hwnd) orelse return error.GetDC;
 
     const status = wglChoosePixelFormatARB(
         dc,
@@ -160,7 +138,15 @@ pub fn createOpenGLContextWin(hwnd: win32.foundation.HWND) !gdi.HDC {
         return error.WglMakeCurrent;
     }
 
-    return dc;
+    return .{
+        .device_context = dc,
+        .opengl_rendering_context = rc.?,
+        .window_handle = window.hwnd,
+    };
+}
+
+pub fn swapBuffers(self: *OpenGLContext) void {
+    _ = open_gl.SwapBuffers(self.device_context);
 }
 
 const WGL_DRAW_TO_WINDOW_ARB = 0x2001;
@@ -190,3 +176,36 @@ const WGL_CONTEXT_FORWARD_COMPATIBLE_BIT_ARB = 0x0002;
 
 const GL_FALSE: u32 = 0;
 const GL_TRUE: u32 = 1;
+
+const std = @import("std");
+const gl = @import("gl");
+
+const win32 = @import("win32");
+const windows = win32.ui.windows_and_messaging;
+const open_gl = win32.graphics.open_gl;
+const lib_loader = win32.system.library_loader;
+const gdi = win32.graphics.gdi;
+
+const PFNWGLCHOOSEPIXELFORMATARBPROC = *const fn (
+    hdc: gdi.HDC,
+    piAttribIList: ?[*]const i32,
+    pfAttribFList: ?[*]const f32,
+    nMaxFormats: u32,
+    piFormats: ?[*]i32,
+    nNumFormats: ?*u32,
+) callconv(.winapi) i32;
+
+const PFNWGLCREATECONTEXTATTRIBSARBPROC = *const fn (
+    hDC: gdi.HDC,
+    hShareContext: ?win32.graphics.open_gl.HGLRC,
+    attribList: ?[*]const i32,
+) callconv(.winapi) ?win32.graphics.open_gl.HGLRC;
+
+pub const HDC = gdi.HDC;
+pub const HGLRC = open_gl.HGLRC;
+pub const HWND = win32.foundation.HWND;
+
+const OpenGLContext = @import("OpenGLContext.zig").OpenGLContext;
+const Window = @import("../../window.zig").Window;
+
+pub const glGetProcAddress = open_gl.wglGetProcAddress;

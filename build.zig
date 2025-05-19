@@ -54,7 +54,10 @@ pub fn build(b: *std.Build) void {
     exe_mod.addImport("vtparse", vtparse_mod);
     exe_mod.addImport("freetype", freetype_mod);
     exe_mod.addImport("gl", gl_bindings);
-    if (target.result.os.tag == .linux) exe_mod.linkSystemLibrary("X11", .{});
+    if (target.result.os.tag == .linux) {
+        exe_mod.linkSystemLibrary("X11", .{});
+        exe_mod.linkSystemLibrary("GL", .{});
+    }
 
     const exe = b.addExecutable(.{
         .name = "cross_pty",
