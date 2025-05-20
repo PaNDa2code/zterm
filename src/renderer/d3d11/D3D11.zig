@@ -24,6 +24,7 @@ const dxc = win32.graphics.direct3d.dxc;
 const hlsl = win32.graphics.hlsl;
 
 const DxgiDebugInterface = @import("DxgiDebugInterface.zig");
+const Window = @import("../../window.zig").Window;
 
 const HWND = foundation.HWND;
 const ID3D11Device = d3d11.ID3D11Device;
@@ -48,7 +49,7 @@ pixel_shader_blob: *ID3DBlob = undefined,
 dxdi: if (builtin.mode == .Debug) DxgiDebugInterface else void = undefined,
 
 // TODO: Replace manual HRESULT checks with proper Zig error unions and error sets when supported.
-pub fn init(hwnd: HWND) !D3D11Renderer {
+pub fn init(window: *Window) !D3D11Renderer {
     var self: D3D11Renderer = .{};
 
     const sd = dxgi.DXGI_SWAP_CHAIN_DESC{
@@ -65,7 +66,7 @@ pub fn init(hwnd: HWND) !D3D11Renderer {
         },
         .BufferUsage = dxgi.DXGI_USAGE_RENDER_TARGET_OUTPUT,
         .BufferCount = 1,
-        .OutputWindow = hwnd,
+        .OutputWindow = window.hwnd,
         .Flags = 0,
         .SwapEffect = .DISCARD,
         .SampleDesc = .{ .Count = 1, .Quality = 0 },

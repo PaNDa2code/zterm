@@ -22,9 +22,12 @@ const Win32Loader = struct {
 };
 
 const PosixLoader = struct {
+    const c = @cImport({
+        @cInclude("dlfcn.h");
+    });
+
     pub fn init(library_name: [*:0]const u8) !DynamicLibrary {
-        _ = library_name;
-        return .{ .lib = undefined };
+        return .{ .lib = c.dlopen(library_name, c.RTLD_NOW) orelse return error.FailedToLoadDynamicLibrary };
     }
 
     pub fn getProcAddress(self: *const DynamicLibrary, name: [*:0]const u8) ?*const anyopaque {

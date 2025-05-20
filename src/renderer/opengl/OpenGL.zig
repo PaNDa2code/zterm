@@ -17,22 +17,29 @@ fn getProc(name: [*:0]const u8) ?*const anyopaque {
 
     p = OpenGLContext.glGetProcAddress(name);
 
-    // zig fmt: off
     // https://www.khronos.org/opengl/wiki/Load_OpenGL_Functions
-    if (p == null 
-        or @intFromPtr(p) == 1 
-        or @intFromPtr(p) == 2 
-        or @intFromPtr(p) == 3 
-        or @as(isize, @bitCast(@intFromPtr(p))) == -1) 
+    if (p == null or
+        @import("builtin").os.tag == .windows and
+            (p == @as(?*const anyopaque, @ptrFromInt(1)) or
+                p == @as(?*const anyopaque, @ptrFromInt(2)) or
+                p == @as(?*const anyopaque, @ptrFromInt(3)) or
+                p == @as(?*const anyopaque, @ptrFromInt(@as(usize, @bitCast(@as(isize, -1)))))))
     {
         p = gl_lib.getProcAddress(name);
     }
-    // zig fmt: on
 
     return p;
 }
 
 fn getProcTableOnce() void {
+    const shared_lib_name = switch (@import("builtin").os.tag) {
+        .windows => "opengl32",
+        .linux, .macos => "libGL.so.1",
+        else => {},
+    };
+
+    gl_lib = DynamicLibrary.init(shared_lib_name) catch unreachable;
+
     if (!porc.init(getProc)) {
         std.debug.panic("failed to load opengl proc table", .{});
     }
@@ -43,7 +50,6 @@ fn getProcTableOnce() void {
 pub fn init(window: *Window) !OpenGLRenderer {
     var self: OpenGLRenderer = undefined;
     self.context = try OpenGLContext.createOpenGLContext(window);
-    gl_lib = try DynamicLibrary.init("opengl32.dll");
     load_proc_once.call();
     self.proc_table = &porc;
     return self;
