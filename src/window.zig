@@ -256,6 +256,8 @@ const X11Window = struct {
     }
 
     pub fn close(self: *Window) void {
+        self.renderer.deinit();
         _ = x11.XDestroyWindow(@ptrCast(self.display), self.w);
+        _ = x11.XCloseDisplay(@ptrCast(self.display));
     }
 };

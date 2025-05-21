@@ -52,6 +52,11 @@ pub fn swapBuffers(self: *OpenGLContext) void {
     self.glXSwapBuffers(@ptrCast(self.display), self.drawable);
 }
 
+pub fn destory(self: *OpenGLContext) void {
+    _ = c.glx.glXMakeCurrent(@ptrCast(self.display), c.glx.None, null);
+    _ = c.glx.glXDestroyContext(@ptrCast(self.display), self.context);
+}
+
 const std = @import("std");
 const gl = @import("gl");
 

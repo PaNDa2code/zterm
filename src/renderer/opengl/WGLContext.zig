@@ -149,6 +149,11 @@ pub fn swapBuffers(self: *OpenGLContext) void {
     _ = open_gl.SwapBuffers(self.device_context);
 }
 
+pub fn destory(self: *OpenGLContext) void {
+    _ = open_gl.wglMakeCurrent(null, null);
+    _ = gdi.ReleaseDC(self.window_handle, self.device_context);
+}
+
 const WGL_DRAW_TO_WINDOW_ARB = 0x2001;
 const WGL_SUPPORT_OPENGL_ARB = 0x2010;
 const WGL_DOUBLE_BUFFER_ARB = 0x2011;
