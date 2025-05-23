@@ -210,6 +210,9 @@ const X11Window = struct {
     w: c_ulong = undefined,
     renderer: RendererApi = undefined,
 
+    exit: bool = false,
+    wm_delete_window: c_ulong = 0,
+
     pub fn new(allocator: Allocator, title: []const u8, height: u32, width: u32) Window {
         return .{
             .allocator = allocator,
@@ -232,13 +235,24 @@ const X11Window = struct {
         const name = try std.fmt.allocPrintZ(self.allocator, "{s}", .{self.title});
         _ = x11.XStoreName(@ptrCast(display), self.w, name.ptr);
         self.allocator.free(name);
+
+        var wm_delete_window = x11.XInternAtom(@ptrCast(self.display), "WM_DELETE_WINDOW", 0);
+        _ = x11.XSetWMProtocols(@ptrCast(self.display), self.w, &wm_delete_window, 1);
+
+        self.wm_delete_window = wm_delete_window;
     }
 
     pub fn messageLoop(self: *Window) void {
-        var wm_delete_window = x11.XInternAtom(@ptrCast(self.display), "WM_DELETE_WINDOW", 0);
-        _ = x11.XSetWMProtocols(@ptrCast(self.display), self.w, &wm_delete_window, 1);
+        while (!self.exit) {
+            self.pumpMessages();
+        }
+    }
+
+    pub fn pumpMessages(self: *Window) void {
         var event: x11.XEvent = undefined;
-        while (true) {
+        const pending = x11.XPending(self.display);
+        var i: c_int = 0;
+        while (i < pending) : (i += 1) {
             _ = x11.XNextEvent(self.display, &event);
             if (event.type == x11.Expose) {
                 self.renderer.clearBuffer(.{ .r = 0.18, .g = 0.35, .b = 0.5, .a = 1 });
@@ -247,11 +261,17 @@ const X11Window = struct {
 
             if (event.type == x11.KeyPress and
                 x11.XLookupKeysym(@constCast(&event.xkey), 0) == x11.XK_Escape)
+            {
+                self.exit = true;
                 break;
+            }
 
             if (event.type == x11.ClientMessage and
-                event.xclient.data.l[0] == wm_delete_window)
+                event.xclient.data.l[0] == self.wm_delete_window)
+            {
+                self.exit = true;
                 break;
+            }
         }
     }
 
