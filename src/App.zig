@@ -12,7 +12,7 @@ pub fn new(allocator: Allocator) App {
         .window = Window.new(allocator, "zterm", 600, 800),
         .allocator = allocator,
         .vt_parser = VTParser.init(vt_parse_callback),
-        .child = .{ .exe_path = "bash" },
+        .child = .{ .exe_path = if (@import("builtin").os.tag == .windows) "cmd" else "bash" },
         .pty = undefined,
         .buffer = undefined,
     };
@@ -29,16 +29,16 @@ pub fn start(self: *App) !void {
 }
 
 pub fn loop(self: *App) void {
-    // var buffer: [1024]u8 = undefined;
-    // const child_stdout = self.child.stdout.?;
+    var buffer: [1024]u8 = undefined;
+    const child_stdout = self.child.stdout.?;
 
     while (!self.window.exit) {
         self.window.pumpMessages();
         self.window.renderer.clearBuffer(.Gray);
         self.window.renderer.presentBuffer();
 
-        // const len = child_stdout.read(buffer[0..]) catch unreachable;
-        // self.vt_parser.parse(buffer[0..len]);
+        const len = child_stdout.read(buffer[0..]) catch unreachable;
+        self.vt_parser.parse(buffer[0..len]);
     }
 }
 
