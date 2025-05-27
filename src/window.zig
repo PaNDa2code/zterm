@@ -8,6 +8,7 @@ const Allocator = std.mem.Allocator;
 pub const Window = switch (os) {
     .windows => Win32Window,
     .linux => X11Window,
+    else => {},
 };
 
 pub const WindowResizeEvent = struct {
