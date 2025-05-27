@@ -31,13 +31,11 @@ const PosixLoader = struct {
     }
 
     pub fn getProcAddress(self: *const DynamicLibrary, name: [*:0]const u8) ?*const anyopaque {
-        _ = self;
-        _ = name;
-        return null;
+        return c.dlsym(self.lib, name);
     }
 
     pub fn deinit(self: *const DynamicLibrary) void {
-        _ = self;
+        _ = c.dlclose(self.lib);
     }
 };
 
