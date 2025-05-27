@@ -5,7 +5,10 @@ const builtin = @import("builtin");
 const os = builtin.os.tag;
 const Allocator = std.mem.Allocator;
 
-pub const Window = if (os == .windows) Win32Window else X11Window;
+pub const Window = switch (os) {
+    .windows => Win32Window,
+    .linux => X11Window,
+};
 
 pub const WindowResizeEvent = struct {
     new_height: u32,
@@ -35,7 +38,7 @@ const Win32Window = struct {
     height: u32,
     width: u32,
     renderer: RendererApi = undefined,
-    allocator: Allocator = undefined,
+    allocator: Allocator,
 
     pub fn new(allocator: Allocator, title: []const u8, height: u32, width: u32) Window {
         return .{
@@ -163,17 +166,8 @@ const Win32Window = struct {
     }
 
     pub fn messageLoop(self: *Window) void {
-        var msg: win32wm.MSG = undefined;
-        while (true) {
-            if (win32wm.PeekMessageW(&msg, null, 0, 0, .{ .REMOVE = 1 }) > 0) {
-                if (msg.message == win32wm.WM_QUIT)
-                    break;
-                _ = win32wm.TranslateMessage(&msg);
-                _ = win32wm.DispatchMessageW(&msg);
-
-                self.renderer.clearBuffer(.{ .r = 0.18, .g = 0.35, .b = 0.5, .a = 1 });
-                self.renderer.presentBuffer();
-            }
+        while (!self.exit) {
+            self.pumpMessages();
         }
     }
 
@@ -254,10 +248,6 @@ const X11Window = struct {
         var i: c_int = 0;
         while (i < pending) : (i += 1) {
             _ = x11.XNextEvent(self.display, &event);
-            if (event.type == x11.Expose) {
-                self.renderer.clearBuffer(.{ .r = 0.18, .g = 0.35, .b = 0.5, .a = 1 });
-                self.renderer.presentBuffer();
-            }
 
             if (event.type == x11.KeyPress and
                 x11.XLookupKeysym(@constCast(&event.xkey), 0) == x11.XK_Escape)

@@ -2,7 +2,7 @@ window: Window,
 pty: Pty,
 buffer: CircularBuffer,
 child: ChildProcess,
-// vt_parser: VTParser,
+vt_parser: VTParser,
 allocator: Allocator,
 
 const App = @This();
@@ -11,7 +11,7 @@ pub fn new(allocator: Allocator) App {
     return .{
         .window = Window.new(allocator, "zterm", 600, 800),
         .allocator = allocator,
-        // .vt_parser = VTParser.init(cb),
+        .vt_parser = VTParser.init(vt_parse_callback),
         .child = .{ .exe_path = "bash" },
         .pty = undefined,
         .buffer = undefined,
@@ -29,7 +29,21 @@ pub fn start(self: *App) !void {
 }
 
 pub fn loop(self: *App) void {
-    self.window.messageLoop();
+    // var buffer: [1024]u8 = undefined;
+    // const child_stdout = self.child.stdout.?;
+
+    while (!self.window.exit) {
+        self.window.pumpMessages();
+        self.window.renderer.clearBuffer(.Gray);
+        self.window.renderer.presentBuffer();
+
+        // const len = child_stdout.read(buffer[0..]) catch unreachable;
+        // self.vt_parser.parse(buffer[0..len]);
+    }
+}
+
+fn vt_parse_callback(state: *const vtparse.ParserData, to_action: vtparse.Action, char: u8) void {
+    std.log.info("{0s: <10}{1s: <13} => {2c} {2d}", .{ @tagName(state.state), @tagName(to_action), char });
 }
 
 pub fn exit(self: *App) void {

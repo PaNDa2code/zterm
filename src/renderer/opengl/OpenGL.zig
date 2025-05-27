@@ -3,17 +3,21 @@ const gl = @import("gl");
 
 const OpenGLRenderer = @This();
 const DynamicLibrary = @import("../../DynamicLibrary.zig");
-const OpenGLContext = @import("OpenGLContext.zig").OpenGLContext;
+
+pub const OpenGLContext = switch (@import("builtin").os.tag) {
+    .windows => @import("WGLContext.zig"),
+    .linux => @import("GLXContext.zig"),
+    else => void,
+};
 
 threadlocal var gl_proc: gl.ProcTable = undefined;
 threadlocal var gl_lib: DynamicLibrary = undefined;
 threadlocal var gl_proc_is_loaded: bool = false;
-// threadlocal var load_proc_once = std.once(getProcTableOnce);
 
-// proc_table: *gl.ProcTable,
 context: OpenGLContext,
 vertex_shader: gl.uint,
 fragment_shader: gl.uint,
+shader_program: gl.uint,
 
 fn getProc(name: [*:0]const u8) ?*const anyopaque {
     var p: ?*const anyopaque = null;
@@ -70,6 +74,14 @@ pub fn init(window: *Window) !OpenGLRenderer {
 
     gl_proc.CompileShader(self.vertex_shader);
     gl_proc.CompileShader(self.fragment_shader);
+
+    self.shader_program = gl_proc.CreateProgram();
+    gl_proc.AttachShader(self.shader_program, self.vertex_shader);
+    gl_proc.AttachShader(self.shader_program, self.fragment_shader);
+    gl_proc.LinkProgram(self.shader_program);
+
+    // gl_proc.DeleteShader(self.vertex_shader);
+    // gl_proc.DeleteShader(self.fragment_shader);
 
     return self;
 }
