@@ -29,16 +29,17 @@ pub fn start(self: *App) !void {
 }
 
 pub fn loop(self: *App) void {
-    var buffer: [1024]u8 = undefined;
-    const child_stdout = self.child.stdout.?;
+    // var buffer: [1024]u8 = undefined;
+    // const child_stdout = self.child.stdout.?;
+    //
+    // const len = child_stdout.read(buffer[0..]) catch unreachable;
+    // self.vt_parser.parse(buffer[0..len]);
 
     while (!self.window.exit) {
         self.window.pumpMessages();
         self.window.renderer.clearBuffer(.Gray);
+        self.window.renderer.renaderText("HelloWorld!", 100, 100, .White);
         self.window.renderer.presentBuffer();
-
-        const len = child_stdout.read(buffer[0..]) catch unreachable;
-        self.vt_parser.parse(buffer[0..len]);
     }
 }
 

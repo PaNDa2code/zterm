@@ -1,5 +1,6 @@
 const std = @import("std");
 const gl = @import("gl");
+const glm = @import("ziglm");
 
 const OpenGLRenderer = @This();
 const DynamicLibrary = @import("../../DynamicLibrary.zig");
@@ -18,6 +19,9 @@ context: OpenGLContext,
 vertex_shader: gl.uint,
 fragment_shader: gl.uint,
 shader_program: gl.uint,
+characters: std.hash_map.AutoHashMap(u8, Character),
+VAO: gl.uint,
+VBO: gl.uint,
 
 fn getProc(name: [*:0]const u8) ?*const anyopaque {
     var p: ?*const anyopaque = null;
@@ -80,8 +84,27 @@ pub fn init(window: *Window) !OpenGLRenderer {
     gl_proc.AttachShader(self.shader_program, self.fragment_shader);
     gl_proc.LinkProgram(self.shader_program);
 
-    // gl_proc.DeleteShader(self.vertex_shader);
-    // gl_proc.DeleteShader(self.fragment_shader);
+    gl_proc.DeleteShader(self.vertex_shader);
+    gl_proc.DeleteShader(self.fragment_shader);
+
+    self.characters = @TypeOf(self.characters).init(window.allocator);
+
+    try self.loadChars();
+
+    var VAO: gl.uint = undefined;
+    var VBO: gl.uint = undefined;
+    gl.GenVertexArrays(1, @ptrCast(&VAO));
+    gl.GenBuffers(1, @ptrCast(&VBO));
+    gl.BindVertexArray(VAO);
+    gl.BindBuffer(gl.ARRAY_BUFFER, VBO);
+    gl.BufferData(gl.ARRAY_BUFFER, @sizeOf(f32) * 6 * 4, null, gl.DYNAMIC_DRAW);
+    gl.EnableVertexAttribArray(0);
+    gl.VertexAttribPointer(0, 4, gl.FLOAT, gl.FALSE, 4 * @sizeOf(f32), 0);
+    gl.BindBuffer(gl.ARRAY_BUFFER, 0);
+    gl.BindVertexArray(0);
+
+    self.VAO = VAO;
+    self.VBO = VBO;
 
     return self;
 }
@@ -89,6 +112,7 @@ pub fn init(window: *Window) !OpenGLRenderer {
 pub fn deinit(self: *OpenGLRenderer) void {
     gl_lib.deinit();
     self.context.destory();
+    self.characters.deinit();
 }
 
 pub fn clearBuffer(self: *OpenGLRenderer, color: ColorRGBA) void {
@@ -101,6 +125,119 @@ pub fn presentBuffer(self: *OpenGLRenderer) void {
     self.context.swapBuffers();
 }
 
+pub fn loadChars(self: *OpenGLRenderer) !void {
+    const ft_library = try freetype.Library.init(self.characters.allocator);
+    defer ft_library.deinit();
+    const font_face = try ft_library.face("/usr/share/fonts/truetype/lato/Lato-Bold.ttf", 24);
+    defer font_face.deinit();
+
+    var c: u8 = 20;
+
+    gl.PixelStorei(gl.UNPACK_ALIGNMENT, 1);
+
+    gl.Enable(gl.BLEND);
+    gl.BlendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
+
+    while (c < 128) : (c += 1) {
+        const glyph = try font_face.getGlyph(c);
+        defer glyph.deinit();
+
+        var texture: gl.uint = 0;
+
+        gl_proc.GenTextures(1, @ptrCast(&texture));
+        gl_proc.BindTexture(gl.TEXTURE_2D, texture);
+
+        gl_proc.TexImage2D(
+            gl.TEXTURE_2D,
+            0,
+            gl.RED,
+            @intCast(font_face.ft_face.*.glyph.*.bitmap.width),
+            @intCast(font_face.ft_face.*.glyph.*.bitmap.rows),
+            0,
+            gl.RED,
+            gl.UNSIGNED_BYTE,
+            font_face.ft_face.*.glyph.*.bitmap.buffer,
+        );
+
+        gl_proc.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+        gl_proc.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+        gl_proc.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+        gl_proc.TexParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR);
+
+        const character = Character{
+            .texture_id = texture,
+            .size = .{
+                .x = @intCast(font_face.ft_face.*.glyph.*.bitmap.width),
+                .y = @intCast(font_face.ft_face.*.glyph.*.bitmap.rows),
+            },
+            .bearing = .{
+                .x = @intCast(font_face.ft_face.*.glyph.*.bitmap_left),
+                .y = @intCast(font_face.ft_face.*.glyph.*.bitmap_top),
+            },
+            .advance = @intCast(font_face.ft_face.*.glyph.*.advance.x),
+        };
+
+        try self.characters.put(c, character);
+    }
+}
+
+pub fn renaderText(self: *OpenGLRenderer, buffer: []const u8, x: u32, y: u32, color: ColorRGBA) void {
+    gl.UseProgram(self.shader_program);
+    gl.Uniform3f(gl.GetUniformLocation(self.shader_program, "textColor"), color.r, color.g, color.b);
+    gl.ActiveTexture(gl.TEXTURE0);
+    gl.BindVertexArray(self.VAO);
+
+    const projection = comptime makeOrtho2D(800, 600);
+    gl.UniformMatrix4fv(gl.GetUniformLocation(self.shader_program, "projection"), 1, gl.FALSE, @ptrCast(&projection));
+
+    var _x: u32 = x;
+    for (buffer) |c| {
+        const ch = self.characters.get(c) orelse continue;
+        const xpos: f32 = @floatFromInt(@as(i32, @intCast(_x)) + ch.bearing.x);
+        const ypos: f32 = @floatFromInt(@as(i32, @intCast(y)) - ch.size.y - ch.bearing.y);
+
+        const w: f32 = @floatFromInt(ch.size.x);
+        const h: f32 = @floatFromInt(ch.size.y);
+
+        const vertices = [6][4]f32{
+            .{ xpos, ypos + h, 0.0, 0.0 },
+            .{ xpos, ypos, 0.0, 1.0 },
+            .{ xpos + w, ypos, 1.0, 1.0 },
+            .{ xpos, ypos + h, 0.0, 0.0 },
+            .{ xpos + w, ypos, 1.0, 1.0 },
+            .{ xpos + w, ypos + h, 1.0, 0.0 },
+        };
+
+        gl.BindTexture(gl.TEXTURE_2D, @intCast(ch.texture_id));
+        gl.BindBuffer(gl.ARRAY_BUFFER, self.VBO);
+        gl.BufferSubData(gl.ARRAY_BUFFER, 0, @sizeOf(@TypeOf(vertices)), &vertices);
+        gl.BindBuffer(gl.ARRAY_BUFFER, 0);
+        gl.DrawArrays(gl.TRIANGLES, 0, 6);
+        _x += (ch.advance >> 6);
+    }
+    gl.BindVertexArray(0);
+    gl.BindTexture(gl.TEXTURE_2D, 0);
+}
+
+pub fn makeOrtho2D(width: f32, height: f32) [4][4]f32 {
+    return [4][4]f32{
+        [4]f32{ 2.0 / width, 0.0, 0.0, 0.0 },
+        [4]f32{ 0.0, 2.0 / height, 0.0, 0.0 },
+        [4]f32{ 0.0, 0.0, -1.0, 0.0 },
+        [4]f32{ -1.0, -1.0, 0.0, 1.0 },
+    };
+}
+
 const common = @import("../common.zig");
 const ColorRGBA = common.ColorRGBA;
 const Window = @import("../../window.zig").Window;
+const freetype = @import("freetype");
+
+const ivic2 = packed struct { x: i32, y: i32 };
+
+const Character = packed struct {
+    texture_id: u32,
+    size: ivic2,
+    bearing: ivic2,
+    advance: u32,
+};
