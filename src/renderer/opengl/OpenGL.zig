@@ -1,15 +1,4 @@
-const std = @import("std");
-const gl = @import("gl");
-const glm = @import("ziglm");
-
-const OpenGLRenderer = @This();
-const DynamicLibrary = @import("../../DynamicLibrary.zig");
-
-pub const OpenGLContext = switch (@import("builtin").os.tag) {
-    .windows => @import("WGLContext.zig"),
-    .linux => @import("GLXContext.zig"),
-    else => void,
-};
+// OpenGL renderer
 
 threadlocal var gl_proc: gl.ProcTable = undefined;
 threadlocal var gl_lib: DynamicLibrary = undefined;
@@ -19,7 +8,7 @@ context: OpenGLContext,
 vertex_shader: gl.uint,
 fragment_shader: gl.uint,
 shader_program: gl.uint,
-characters: std.hash_map.AutoHashMap(u8, Character),
+characters: [128]Character,
 VAO: gl.uint,
 VBO: gl.uint,
 
@@ -30,7 +19,7 @@ fn getProc(name: [*:0]const u8) ?*const anyopaque {
 
     // https://www.khronos.org/opengl/wiki/Load_OpenGL_Functions
     if (p == null or
-        @import("builtin").os.tag == .windows and
+        builtin.os.tag == .windows and
             (p == @as(?*const anyopaque, @ptrFromInt(1)) or
                 p == @as(?*const anyopaque, @ptrFromInt(2)) or
                 p == @as(?*const anyopaque, @ptrFromInt(3)) or
@@ -45,7 +34,7 @@ fn getProc(name: [*:0]const u8) ?*const anyopaque {
 fn getProcTableOnce() void {
     const shared_lib_name = switch (@import("builtin").os.tag) {
         .windows => "opengl32",
-        .linux, .macos => "libGL.so.1",
+        .linux => "libGL.so.1",
         else => {},
     };
 
@@ -61,7 +50,7 @@ fn getProcTableOnce() void {
 const vertex_shader_source = @embedFile("shaders/vertex.glsl");
 const fragment_shader_source = @embedFile("shaders/fragment.glsl");
 
-pub fn init(window: *Window) !OpenGLRenderer {
+pub fn init(window: *Window, allocator: Allocator) !OpenGLRenderer {
     var self: OpenGLRenderer = undefined;
     self.context = try OpenGLContext.createOpenGLContext(window);
 
@@ -87,9 +76,7 @@ pub fn init(window: *Window) !OpenGLRenderer {
     gl_proc.DeleteShader(self.vertex_shader);
     gl_proc.DeleteShader(self.fragment_shader);
 
-    self.characters = @TypeOf(self.characters).init(window.allocator);
-
-    try self.loadChars();
+    try self.loadChars(allocator);
 
     var VAO: gl.uint = undefined;
     var VBO: gl.uint = undefined;
@@ -109,10 +96,10 @@ pub fn init(window: *Window) !OpenGLRenderer {
     return self;
 }
 
-pub fn deinit(self: *OpenGLRenderer) void {
+pub fn deinit(self: *OpenGLRenderer, allocator: Allocator) void {
+    _ = allocator;
     gl_lib.deinit();
     self.context.destory();
-    self.characters.deinit();
 }
 
 pub fn clearBuffer(self: *OpenGLRenderer, color: ColorRGBA) void {
@@ -125,10 +112,10 @@ pub fn presentBuffer(self: *OpenGLRenderer) void {
     self.context.swapBuffers();
 }
 
-pub fn loadChars(self: *OpenGLRenderer) !void {
-    const ft_library = try freetype.Library.init(self.characters.allocator);
+pub fn loadChars(self: *OpenGLRenderer, allocator: Allocator) !void {
+    const ft_library = try freetype.Library.init(allocator);
     defer ft_library.deinit();
-    const font_face = try ft_library.face("/usr/share/fonts/truetype/lato/Lato-Bold.ttf", 24);
+    const font_face = try ft_library.face("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 24);
     defer font_face.deinit();
 
     var c: u8 = 20;
@@ -177,7 +164,7 @@ pub fn loadChars(self: *OpenGLRenderer) !void {
             .advance = @intCast(font_face.ft_face.*.glyph.*.advance.x),
         };
 
-        try self.characters.put(c, character);
+        self.characters[@intCast(c)] = character;
     }
 }
 
@@ -192,7 +179,7 @@ pub fn renaderText(self: *OpenGLRenderer, buffer: []const u8, x: u32, y: u32, co
 
     var _x: u32 = x;
     for (buffer) |c| {
-        const ch = self.characters.get(c) orelse continue;
+        const ch = if (c < self.characters.len) self.characters[@intCast(c)] else continue;
         const xpos: f32 = @floatFromInt(@as(i32, @intCast(_x)) + ch.bearing.x);
         const ypos: f32 = @floatFromInt(@as(i32, @intCast(y)) - ch.size.y - ch.bearing.y);
 
@@ -228,11 +215,6 @@ pub fn makeOrtho2D(width: f32, height: f32) [4][4]f32 {
     };
 }
 
-const common = @import("../common.zig");
-const ColorRGBA = common.ColorRGBA;
-const Window = @import("../../window.zig").Window;
-const freetype = @import("freetype");
-
 const ivic2 = packed struct { x: i32, y: i32 };
 
 const Character = packed struct {
@@ -241,3 +223,22 @@ const Character = packed struct {
     bearing: ivic2,
     advance: u32,
 };
+
+const OpenGLRenderer = @This();
+const DynamicLibrary = @import("../../DynamicLibrary.zig");
+
+const OpenGLContext = switch (builtin.os.tag) {
+    .windows => @import("WGLContext.zig"),
+    .linux => @import("GLXContext.zig"),
+    else => void,
+};
+
+const std = @import("std");
+const builtin = @import("builtin");
+const gl = @import("gl");
+const common = @import("../common.zig");
+const ColorRGBA = common.ColorRGBA;
+const Window = @import("../../window.zig").Window;
+const freetype = @import("freetype");
+
+const Allocator = std.mem.Allocator;

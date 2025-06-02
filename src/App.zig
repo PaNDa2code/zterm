@@ -9,7 +9,7 @@ const App = @This();
 
 pub fn new(allocator: Allocator) App {
     return .{
-        .window = Window.new(allocator, "zterm", 600, 800),
+        .window = Window.new("zterm", 600, 800),
         .allocator = allocator,
         .vt_parser = VTParser.init(vt_parse_callback),
         .child = .{ .exe_path = if (@import("builtin").os.tag == .windows) "cmd" else "bash" },
@@ -22,7 +22,7 @@ pub fn start(self: *App) !void {
     var arina = std.heap.ArenaAllocator.init(self.allocator);
     defer arina.deinit();
 
-    try self.window.open();
+    try self.window.open(self.allocator);
     try self.buffer.init(1024 * 64);
     try self.pty.open(.{});
     try self.child.start(arina.allocator(), &self.pty);
@@ -48,7 +48,7 @@ fn vt_parse_callback(state: *const vtparse.ParserData, to_action: vtparse.Action
 }
 
 pub fn exit(self: *App) void {
-    self.window.close();
+    self.window.close(self.allocator);
     self.child.terminate();
     self.buffer.deinit();
     self.pty.close();

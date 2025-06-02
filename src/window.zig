@@ -39,20 +39,16 @@ const Win32Window = struct {
     height: u32,
     width: u32,
     renderer: RendererApi = undefined,
-    allocator: Allocator,
 
-    pub fn new(allocator: Allocator, title: []const u8, height: u32, width: u32) Window {
+    pub fn new(title: []const u8, height: u32, width: u32) Window {
         return .{
-            .allocator = allocator,
             .title = title,
             .height = height,
             .width = width,
         };
     }
 
-    pub fn open(self: *Window) !void {
-        const allocator = self.allocator;
-
+    pub fn open(self: *Window, allocator: Allocator) !void {
         const class_name = try utf8ToUtf16LeAllocZ(allocator, self.title);
         defer allocator.free(class_name);
 
@@ -100,7 +96,7 @@ const Win32Window = struct {
 
         self.hwnd = hwnd;
 
-        self.renderer = try RendererApi.init(self);
+        self.renderer = try RendererApi.init(self, allocator);
 
         _ = win32wm.ShowWindow(hwnd, .{ .SHOWNORMAL = 1 });
     }
@@ -199,7 +195,6 @@ const X11Window = struct {
     title: []const u8,
     height: u32,
     width: u32,
-    allocator: Allocator = undefined,
     display: *x11.Display = undefined,
     s: c_int = undefined,
     w: c_ulong = undefined,
@@ -208,16 +203,15 @@ const X11Window = struct {
     exit: bool = false,
     wm_delete_window: c_ulong = 0,
 
-    pub fn new(allocator: Allocator, title: []const u8, height: u32, width: u32) Window {
+    pub fn new(title: []const u8, height: u32, width: u32) Window {
         return .{
-            .allocator = allocator,
             .title = title,
             .height = height,
             .width = width,
         };
     }
 
-    pub fn open(self: *Window) !void {
+    pub fn open(self: *Window, allocator: Allocator) !void {
         const display = x11.XOpenDisplay(null);
         const screen = x11.DefaultScreen(display);
 
@@ -225,11 +219,11 @@ const X11Window = struct {
         self.s = screen;
 
         // x11 window is created inside opengl context creator
-        self.renderer = try RendererApi.init(self);
+        self.renderer = try RendererApi.init(self, allocator);
 
-        const name = try std.fmt.allocPrintZ(self.allocator, "{s}", .{self.title});
+        const name = try std.fmt.allocPrintZ(allocator, "{s}", .{self.title});
         _ = x11.XStoreName(@ptrCast(display), self.w, name.ptr);
-        self.allocator.free(name);
+        allocator.free(name);
 
         var wm_delete_window = x11.XInternAtom(@ptrCast(self.display), "WM_DELETE_WINDOW", 0);
         _ = x11.XSetWMProtocols(@ptrCast(self.display), self.w, &wm_delete_window, 1);
@@ -266,8 +260,8 @@ const X11Window = struct {
         }
     }
 
-    pub fn close(self: *Window) void {
-        self.renderer.deinit();
+    pub fn close(self: *Window, allocator: Allocator) void {
+        self.renderer.deinit(allocator);
         _ = x11.XDestroyWindow(@ptrCast(self.display), self.w);
         _ = x11.XCloseDisplay(@ptrCast(self.display));
     }
