@@ -9,8 +9,8 @@ pub const EventType = enum {
 };
 
 pub const Event = union(EventType) {
-    KeyBoardInput: KeyboardEvent,
-    MouseInput: void,
     Window: WindowResizeEvent,
+    KeyboardInput: KeyboardEvent,
+    MouseInput: void,
     PtyIO: void,
 };

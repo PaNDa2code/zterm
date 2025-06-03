@@ -1,7 +1,3 @@
-const std = @import("std");
-const win32 = @import("win32");
-const builtin = @import("builtin");
-
 const os = builtin.os.tag;
 
 pub const ShellEnum = enum {
@@ -184,5 +180,9 @@ test {
     var pty: Pty = undefined;
     try pty.open(.{});
     // closing pty will make a deadlock
-    // defer pty.close();
+    defer pty.close();
 }
+
+const std = @import("std");
+const win32 = @import("win32");
+const builtin = @import("builtin");

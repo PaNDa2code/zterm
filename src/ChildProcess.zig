@@ -1,28 +1,4 @@
-const std = @import("std");
-const win32 = @import("win32");
-const builtin = @import("builtin");
-
-const Wide = std.unicode.utf8ToUtf16LeStringLiteral;
-const WideAlloc = std.unicode.utf8ToUtf16LeAllocZ;
-
-const posix = std.posix;
-const linux = std.os.linux;
-
-const win32con = win32.system.console;
-const win32fnd = win32.foundation;
-const win32pipe = win32.system.pipes;
-const win32sec = win32.security;
-const win32thread = win32.system.threading;
-const win32fs = win32.storage.file_system;
-const win32mem = win32.system.memory;
-
-const Pty = @import("pty.zig").Pty;
-const ChildProcess = @This();
-
-const File = std.fs.File;
-const Allocator = std.mem.Allocator;
-
-const os = builtin.os.tag;
+// ChildProcess
 
 id: switch (os) {
     .windows => win32fnd.HANDLE,
@@ -38,7 +14,6 @@ cwd: ?[]const u8 = null,
 stdin: ?File = null,
 stdout: ?File = null,
 stderr: ?File = null,
-
 
 pub usingnamespace switch (os) {
     .windows => struct {
@@ -193,13 +168,15 @@ fn startPosix(self: *ChildProcess, arina: std.mem.Allocator, pty: ?*Pty) !void {
     posix.close(master_fd);
     posix.close(slave_fd);
 
+    self.id = pid;
+
     posix.execveZ(pathZ, argsZ, envZ) catch {
         posix.exit(127);
     };
 }
 
 fn terminatePosix(self: *ChildProcess) void {
-    _ = posix.kill(self.id, posix.SIG.TERM) catch {};
+    _ = posix.kill(self.id, posix.SIG.KILL) catch {};
 }
 
 fn waitPosix(self: *ChildProcess) !void {
@@ -255,6 +232,32 @@ test "test ChildProcess with pty" {
     var arina = std.heap.ArenaAllocator.init(std.testing.allocator);
     defer arina.deinit();
     try child.start(arina.allocator(), &pty);
-    // try child.wait();
     defer child.terminate();
+    // try child.wait();
 }
+
+const std = @import("std");
+const win32 = @import("win32");
+const builtin = @import("builtin");
+
+const Wide = std.unicode.utf8ToUtf16LeStringLiteral;
+const WideAlloc = std.unicode.utf8ToUtf16LeAllocZ;
+
+const posix = std.posix;
+const linux = std.os.linux;
+
+const win32con = win32.system.console;
+const win32fnd = win32.foundation;
+const win32pipe = win32.system.pipes;
+const win32sec = win32.security;
+const win32thread = win32.system.threading;
+const win32fs = win32.storage.file_system;
+const win32mem = win32.system.memory;
+
+const Pty = @import("pty.zig").Pty;
+const ChildProcess = @This();
+
+const File = std.fs.File;
+const Allocator = std.mem.Allocator;
+
+const os = builtin.os.tag;

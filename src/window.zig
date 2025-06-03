@@ -17,9 +17,6 @@ pub const WindowResizeEvent = struct {
 };
 
 const Win32Window = struct {
-    const utf8ToUtf16LeStringLiteral = std.unicode.utf8ToUtf16LeStringLiteral;
-    const utf8ToUtf16LeAllocZ = std.unicode.utf8ToUtf16LeAllocZ;
-
     const win32fnd = win32.foundation;
     const win32wm = win32.ui.windows_and_messaging;
     const win32dwm = win32.graphics.dwm;
@@ -49,7 +46,7 @@ const Win32Window = struct {
     }
 
     pub fn open(self: *Window, allocator: Allocator) !void {
-        const class_name = try utf8ToUtf16LeAllocZ(allocator, self.title);
+        const class_name = try std.unicode.utf8ToUtf16LeAllocZ(allocator, self.title);
         defer allocator.free(class_name);
 
         var window_class = std.mem.zeroes(win32wm.WNDCLASSW);
@@ -60,7 +57,7 @@ const Win32Window = struct {
 
         _ = win32wm.RegisterClassW(&window_class);
 
-        const window_name = try utf8ToUtf16LeAllocZ(allocator, self.title);
+        const window_name = try std.unicode.utf8ToUtf16LeAllocZ(allocator, self.title);
         defer allocator.free(window_name);
 
         const hwnd = win32wm.CreateWindowExW(

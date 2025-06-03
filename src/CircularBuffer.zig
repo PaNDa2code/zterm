@@ -1,7 +1,3 @@
-const std = @import("std");
-const win32 = @import("win32");
-const builtin = @import("builtin");
-
 const CircularBuffer = @This();
 
 const page_size = (if (builtin.os.tag == .windows) 64 else 8) * 1024;
@@ -27,21 +23,21 @@ pub fn new(requsted_size: usize) !CircularBuffer {
 
 pub fn init(self: *CircularBuffer, requsted_size: usize) CreateError!void {
     return switch (builtin.os.tag) {
-        .windows => self.init_windows(requsted_size),
-        .linux, .macos => self.init_posix(requsted_size),
+        .windows => self.initWindows(requsted_size),
+        .linux, .macos => self.initPosix(requsted_size),
         else => @compileError("Target os is not supported"),
     };
 }
 
 pub fn deinit(self: *CircularBuffer) void {
     return switch (builtin.os.tag) {
-        .windows => self.deinit_windows(),
-        .linux, .macos => self.deinit_posix(),
+        .windows => self.deinitWindows(),
+        .linux, .macos => self.deinitPosix(),
         else => @compileError("Target os is not supported"),
     };
 }
 
-fn init_windows(self: *CircularBuffer, requsted_size: usize) CreateError!void {
+fn initWindows(self: *CircularBuffer, requsted_size: usize) CreateError!void {
     const size = std.mem.alignForward(usize, requsted_size, 64 * 1024);
 
     const palce_holder = win32.system.memory.VirtualAlloc2(
@@ -121,7 +117,7 @@ fn init_windows(self: *CircularBuffer, requsted_size: usize) CreateError!void {
     self.view_size = size;
 }
 
-fn init_posix(self: *CircularBuffer, requsted_size: usize) CreateError!void {
+fn initPosix(self: *CircularBuffer, requsted_size: usize) CreateError!void {
     const size = std.mem.alignForward(usize, requsted_size, page_size);
 
     const place_holder = std.posix.mmap(
@@ -179,7 +175,7 @@ fn init_posix(self: *CircularBuffer, requsted_size: usize) CreateError!void {
     self.view_size = size;
 }
 
-fn deinit_posix(self: *CircularBuffer) void {
+fn deinitPosix(self: *CircularBuffer) void {
     if (self.buffer.len == 0 or self.view_size == 0) return;
     std.posix.munmap(@alignCast(self.buffer[0..self.view_size]));
     std.posix.munmap(@alignCast(self.buffer[self.view_size..]));
@@ -187,7 +183,7 @@ fn deinit_posix(self: *CircularBuffer) void {
     self.view_size = 0;
 }
 
-fn deinit_windows(self: *CircularBuffer) void {
+fn deinitWindows(self: *CircularBuffer) void {
     if (self.buffer.len == 0 or self.view_size == 0) return;
     _ = win32.system.memory.UnmapViewOfFile(self.buffer.ptr);
     _ = win32.system.memory.UnmapViewOfFile(self.buffer[self.view_size..].ptr);
@@ -244,3 +240,7 @@ test "ciruler buffer test writer" {
 
     try std.testing.expectEqualSlices(u8, data, ciruler_buffer.getReadableSlice());
 }
+
+const std = @import("std");
+const win32 = @import("win32");
+const builtin = @import("builtin");
