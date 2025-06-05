@@ -38,7 +38,8 @@ pub fn loop(self: *App) void {
     while (!self.window.exit) {
         self.window.pumpMessages();
         self.window.renderer.clearBuffer(.Gray);
-        self.window.renderer.renaderText("HelloWorld!", 100, 100, .White);
+        self.window.renderer.renaderText("HelloWorld!", 10, 570, .White);
+        self.window.renderer.renaderText("PaNDa2code", 10, 540, .Green);
         self.window.renderer.presentBuffer();
     }
 }

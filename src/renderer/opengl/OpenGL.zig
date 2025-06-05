@@ -9,6 +9,7 @@ vertex_shader: gl.uint,
 fragment_shader: gl.uint,
 shader_program: gl.uint,
 characters: [128]Character,
+atlas: gl.uint,
 VAO: gl.uint,
 VBO: gl.uint,
 
@@ -181,7 +182,7 @@ pub fn renaderText(self: *OpenGLRenderer, buffer: []const u8, x: u32, y: u32, co
     for (buffer) |c| {
         const ch = if (c < self.characters.len) self.characters[@intCast(c)] else continue;
         const xpos: f32 = @floatFromInt(@as(i32, @intCast(_x)) + ch.bearing.x);
-        const ypos: f32 = @floatFromInt(@as(i32, @intCast(y)) - ch.size.y - ch.bearing.y);
+        const ypos: f32 = @floatFromInt(@as(i32, @intCast(y)) - ch.size.y + ch.bearing.y);
 
         const w: f32 = @floatFromInt(ch.size.x);
         const h: f32 = @floatFromInt(ch.size.y);
