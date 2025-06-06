@@ -10,6 +10,8 @@ fragment_shader: gl.uint,
 shader_program: gl.uint,
 characters: [128]Character,
 atlas: gl.uint,
+window_height: u32,
+window_width: u32,
 VAO: gl.uint,
 VBO: gl.uint,
 
@@ -57,6 +59,9 @@ pub fn init(window: *Window, allocator: Allocator) !OpenGLRenderer {
 
     if (!gl_proc_is_loaded)
         getProcTableOnce();
+
+    self.window_height = window.height;
+    self.window_width = window.width;
 
     // load_proc_once.call();
 
@@ -116,7 +121,9 @@ pub fn presentBuffer(self: *OpenGLRenderer) void {
 pub fn loadChars(self: *OpenGLRenderer, allocator: Allocator) !void {
     const ft_library = try freetype.Library.init(allocator);
     defer ft_library.deinit();
-    const font_face = try ft_library.face("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf", 24);
+    // const linux_ttf = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf";
+    const win_ttf = "C:\\Users\\Panda\\Downloads\\dejavu-sans\\ttf\\DejaVuSans.ttf";
+    const font_face = try ft_library.face(win_ttf, 24);
     defer font_face.deinit();
 
     var c: u8 = 20;
@@ -175,7 +182,7 @@ pub fn renaderText(self: *OpenGLRenderer, buffer: []const u8, x: u32, y: u32, co
     gl.ActiveTexture(gl.TEXTURE0);
     gl.BindVertexArray(self.VAO);
 
-    const projection = comptime makeOrtho2D(800, 600);
+    const projection = math.makeOrtho2D(@floatFromInt(self.window_width), @floatFromInt(self.window_height));
     gl.UniformMatrix4fv(gl.GetUniformLocation(self.shader_program, "projection"), 1, gl.FALSE, @ptrCast(&projection));
 
     var _x: u32 = x;
@@ -187,13 +194,13 @@ pub fn renaderText(self: *OpenGLRenderer, buffer: []const u8, x: u32, y: u32, co
         const w: f32 = @floatFromInt(ch.size.x);
         const h: f32 = @floatFromInt(ch.size.y);
 
-        const vertices = [6][4]f32{
-            .{ xpos, ypos + h, 0.0, 0.0 },
-            .{ xpos, ypos, 0.0, 1.0 },
-            .{ xpos + w, ypos, 1.0, 1.0 },
-            .{ xpos, ypos + h, 0.0, 0.0 },
-            .{ xpos + w, ypos, 1.0, 1.0 },
-            .{ xpos + w, ypos + h, 1.0, 0.0 },
+        const vertices = [6]Vec4(f32){
+            .{ .x = xpos, .y = ypos + h, .z = 0, .w = 0 },
+            .{ .x = xpos, .y = ypos, .z = 0, .w = 1 },
+            .{ .x = xpos + w, .y = ypos, .z = 1, .w = 1 },
+            .{ .x = xpos, .y = ypos + h, .z = 0, .w = 0 },
+            .{ .x = xpos + w, .y = ypos, .z = 1, .w = 1 },
+            .{ .x = xpos + w, .y = ypos + h, .z = 1, .w = 0 },
         };
 
         gl.BindTexture(gl.TEXTURE_2D, @intCast(ch.texture_id));
@@ -207,23 +214,21 @@ pub fn renaderText(self: *OpenGLRenderer, buffer: []const u8, x: u32, y: u32, co
     gl.BindTexture(gl.TEXTURE_2D, 0);
 }
 
-pub fn makeOrtho2D(width: f32, height: f32) [4][4]f32 {
-    return [4][4]f32{
-        [4]f32{ 2.0 / width, 0.0, 0.0, 0.0 },
-        [4]f32{ 0.0, 2.0 / height, 0.0, 0.0 },
-        [4]f32{ 0.0, 0.0, -1.0, 0.0 },
-        [4]f32{ -1.0, -1.0, 0.0, 1.0 },
-    };
+pub fn resize(self: *OpenGLRenderer, width: u32, height: u32) void {
+    self.window_width = width;
+    self.window_height = height;
 }
-
-const ivic2 = packed struct { x: i32, y: i32 };
 
 const Character = packed struct {
     texture_id: u32,
-    size: ivic2,
-    bearing: ivic2,
+    size: Vec2(i32),
+    bearing: Vec2(i32),
     advance: u32,
 };
+
+const math = @import("../math.zig");
+const Vec2 = math.Vec2;
+const Vec4 = math.Vec4;
 
 const OpenGLRenderer = @This();
 const DynamicLibrary = @import("../../DynamicLibrary.zig");

@@ -82,6 +82,8 @@ const Win32Window = struct {
         // _ = win32wm.AppendMenuW(menu_bar, win32wm.MF_POPUP, @intFromPtr(menu), utf8ToUtf16LeStringLiteral("&File"));
         // _ = win32wm.SetMenu(hwnd, menu_bar);
 
+        _ = win32.ui.hi_dpi.SetProcessDpiAwareness(.PER_MONITOR_DPI_AWARE);
+
         const darkmode: u32 = 1;
 
         _ = win32dwm.DwmSetWindowAttribute(
@@ -105,6 +107,7 @@ const Win32Window = struct {
     pub fn resize(self: *Window, height: u32, width: u32) !void {
         self.height = height;
         self.width = width;
+        // self.renderer.resize(width, height);
     }
 
     fn WindowProcSetup(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) callconv(.winapi) LRESULT {
