@@ -43,6 +43,14 @@ pub fn build(b: *std.Build) void {
         .extensions = &.{},
     });
 
+    const vulkan_headers = b.dependency("vulkan_headers", .{});
+
+    const vulkan = b.dependency("vulkan", .{
+        .registry = vulkan_headers.path("registry/vk.xml"),
+    });
+
+    const vulkan_mod = vulkan.module("vulkan-zig");
+
     const exe_mod = b.createModule(.{
         .root_source_file = b.path("src/main.zig"),
         .target = target,
@@ -54,6 +62,7 @@ pub fn build(b: *std.Build) void {
     exe_mod.addImport("vtparse", vtparse_mod);
     exe_mod.addImport("freetype", freetype_mod);
     exe_mod.addImport("gl", gl_bindings);
+    exe_mod.addImport("vulkan", vulkan_mod);
     if (target.result.os.tag == .linux) {
         exe_mod.linkSystemLibrary("X11", .{});
         exe_mod.linkSystemLibrary("GL", .{});
