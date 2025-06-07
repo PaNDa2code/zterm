@@ -49,7 +49,7 @@ fn vt_parse_callback(state: *const vtparse.ParserData, to_action: vtparse.Action
 }
 
 pub fn exit(self: *App) void {
-    self.window.close(self.allocator);
+    self.window.close();
     self.child.terminate();
     self.buffer.deinit();
     self.pty.close();

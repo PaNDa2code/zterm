@@ -11,6 +11,7 @@ pub fn main() !void {
 
     var app = App.new(allocator);
     try app.start();
+    defer app.exit();
 
     app.loop();
 }

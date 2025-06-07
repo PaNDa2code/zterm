@@ -23,6 +23,7 @@ const Win32Window = struct {
     const win32loader = win32.system.library_loader;
 
     const HANDLE = win32fnd.HANDLE;
+    const HINSTANCE = win32fnd.HINSTANCE;
     const HWND = win32fnd.HWND;
     const LRESULT = win32fnd.LRESULT;
     const WPARAM = win32fnd.WPARAM;
@@ -32,6 +33,7 @@ const Win32Window = struct {
 
     exit: bool = false,
     hwnd: HWND = undefined,
+    h_instance: HINSTANCE = undefined,
     title: []const u8,
     height: u32,
     width: u32,
@@ -49,9 +51,11 @@ const Win32Window = struct {
         const class_name = try std.unicode.utf8ToUtf16LeAllocZ(allocator, self.title);
         defer allocator.free(class_name);
 
+        self.h_instance = win32loader.GetModuleHandleW(null) orelse unreachable;
+
         var window_class = std.mem.zeroes(win32wm.WNDCLASSW);
         window_class.lpszClassName = class_name;
-        window_class.hInstance = win32loader.GetModuleHandleW(null);
+        window_class.hInstance = self.h_instance;
         window_class.lpfnWndProc = &WindowProcSetup;
         window_class.style = .{ .OWNDC = 1, .VREDRAW = 1, .HREDRAW = 1 };
 
@@ -137,6 +141,9 @@ const Win32Window = struct {
                 if (wparam == @intFromEnum(win32.ui.input.keyboard_and_mouse.VK_ESCAPE)) {
                     win32wm.PostQuitMessage(0);
                 }
+                return 0;
+            },
+            win32wm.WM_PAINT => {
                 return 0;
             },
             win32wm.WM_SIZING => {

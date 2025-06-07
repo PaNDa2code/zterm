@@ -43,10 +43,8 @@ pub fn build(b: *std.Build) void {
         .extensions = &.{},
     });
 
-    const vulkan_headers = b.dependency("vulkan_headers", .{});
-
     const vulkan = b.dependency("vulkan", .{
-        .registry = vulkan_headers.path("registry/vk.xml"),
+        .registry = b.dependency("vulkan_headers", .{}).path("registry/vk.xml"),
     });
 
     const vulkan_mod = vulkan.module("vulkan-zig");
