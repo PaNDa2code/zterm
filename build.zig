@@ -7,7 +7,7 @@ pub fn build(b: *std.Build) void {
     const options = b.addOptions();
 
     const options_desc = .{
-        .{ RenderBackend, "render-backend", "Select the graphics backend to use for rendering", .OpenGL },
+        .{ RenderBackend, "render-backend", "Select the graphics backend to use for rendering", .Vulkan },
     };
 
     inline for (@typeInfo(@TypeOf(options_desc)).@"struct".fields) |field| {
