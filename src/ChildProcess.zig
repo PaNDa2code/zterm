@@ -154,6 +154,7 @@ fn startPosix(self: *ChildProcess, arina: std.mem.Allocator, pty: ?*Pty) !void {
         self.stdin = .{ .handle = master_fd };
         self.stdout = .{ .handle = master_fd };
         self.stderr = .{ .handle = master_fd };
+        self.id = pid;
         posix.close(slave_fd);
         return;
     }
@@ -167,8 +168,6 @@ fn startPosix(self: *ChildProcess, arina: std.mem.Allocator, pty: ?*Pty) !void {
 
     posix.close(master_fd);
     posix.close(slave_fd);
-
-    self.id = pid;
 
     posix.execveZ(pathZ, argsZ, envZ) catch {
         posix.exit(127);
