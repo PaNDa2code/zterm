@@ -1,14 +1,15 @@
 const std = @import("std");
 const win32 = @import("win32");
 const builtin = @import("builtin");
+const build_options = @import("build_options");
 
 const os = builtin.os.tag;
 const Allocator = std.mem.Allocator;
 
-pub const Window = switch (os) {
-    .windows => Win32Window,
-    .linux => X11Window,
-    else => {},
+pub const Window = switch (build_options.@"window-system") {
+    .Win32 => Win32Window,
+    .Xlib => XlibWindow,
+    .Xcb => XcbWindow,
 };
 
 pub const WindowResizeEvent = struct {
@@ -17,6 +18,8 @@ pub const WindowResizeEvent = struct {
 };
 
 const Win32Window = struct {
+    pub const system: build_options.@"build.WindowSystem" = .Win32;
+
     const win32fnd = win32.foundation;
     const win32wm = win32.ui.windows_and_messaging;
     const win32dwm = win32.graphics.dwm;
@@ -190,7 +193,9 @@ const Win32Window = struct {
     }
 };
 
-const X11Window = struct {
+const XlibWindow = struct {
+    pub const system: build_options.@"build.WindowSystem" = .Xlib;
+
     const x11 = @cImport({
         @cInclude("X11/Xlib.h");
         @cInclude("X11/keysym.h");
@@ -267,9 +272,123 @@ const X11Window = struct {
         }
     }
 
-    pub fn close(self: *Window, allocator: Allocator) void {
-        self.renderer.deinit(allocator);
+    pub fn close(self: *Window) void {
+        self.renderer.deinit();
         _ = x11.XDestroyWindow(@ptrCast(self.display), self.w);
         _ = x11.XCloseDisplay(@ptrCast(self.display));
+    }
+};
+
+const XcbWindow = struct {
+    pub const system: build_options.@"build.WindowSystem" = .Xcb;
+
+    const c = @cImport({
+        @cInclude("xcb/xcb.h");
+        @cInclude("X11/keysym.h");
+    });
+
+    const RendererApi = @import("renderer/root.zig").Renderer;
+
+    connection: *c.xcb_connection_t = undefined,
+    screen: *c.xcb_screen_t = undefined,
+    window: c.xcb_window_t = undefined,
+    renderer: RendererApi = undefined,
+
+    exit: bool = false,
+    title: []const u8,
+    height: u32,
+    width: u32,
+
+    pub fn new(title: []const u8, height: u32, width: u32) Window {
+        return .{
+            .title = title,
+            .height = height,
+            .width = width,
+        };
+    }
+
+    pub fn open(self: *Window, allocator: Allocator) !void {
+        self.connection = c.xcb_connect(null, null).?;
+        if (c.xcb_connection_has_error(self.connection) != 0) {
+            return error.XCBConnectionError;
+        }
+
+        const setup = c.xcb_get_setup(self.connection);
+        self.screen = c.xcb_setup_roots_iterator(setup).data.?;
+
+        const window_id = c.xcb_generate_id(self.connection);
+        self.window = window_id;
+
+        const value_mask: u32 = c.XCB_CW_BACK_PIXEL | c.XCB_CW_EVENT_MASK;
+        const value_list = [_]u32{
+            self.screen.*.white_pixel,
+            c.XCB_EVENT_MASK_EXPOSURE |
+                c.XCB_EVENT_MASK_KEY_PRESS |
+                c.XCB_EVENT_MASK_STRUCTURE_NOTIFY,
+        };
+
+        _ = c.xcb_create_window(
+            self.connection,
+            self.screen.*.root_depth, // depth
+            window_id, // window id
+            self.screen.*.root, // parent window
+            0,
+            0, // x, y
+            800,
+            600, // width, height
+            0, // border width
+            c.XCB_WINDOW_CLASS_INPUT_OUTPUT,
+            self.screen.*.root_visual,
+            value_mask,
+            &value_list,
+        );
+
+        // Set window title
+        const title = "My XCB Window";
+        _ = c.xcb_change_property(
+            self.connection,
+            c.XCB_PROP_MODE_REPLACE,
+            window_id,
+            c.XCB_ATOM_WM_NAME,
+            c.XCB_ATOM_STRING,
+            8,
+            title.len,
+            title.ptr,
+        );
+
+        // Map (show) the window
+        _ = c.xcb_map_window(self.connection, window_id);
+
+        // Flush all commands
+        _ = c.xcb_flush(self.connection);
+
+        self.renderer = try RendererApi.init(self, allocator);
+    }
+
+    pub fn pumpMessages(self: *Window) void {
+        while (c.xcb_poll_for_event(self.connection)) |event| {
+            const response_type = event.*.response_type & 0x7F;
+
+            switch (response_type) {
+                c.XCB_EXPOSE => {},
+                c.XCB_KEY_PRESS => {
+                    const key_press: *c.xcb_key_press_event_t = @ptrCast(event);
+                    if (key_press.detail == 9)
+                        self.exit = true;
+                },
+                c.XCB_DESTROY_NOTIFY => {
+                    self.exit = true;
+                },
+                c.XCB_CLIENT_MESSAGE => {},
+                else => {},
+            }
+
+            // Free the event after processing
+            std.c.free(event);
+        }
+    }
+    pub fn close(self: *Window) void {
+        _ = c.xcb_destroy_window(self.connection, self.window);
+        c.xcb_disconnect(self.connection);
     }
 };

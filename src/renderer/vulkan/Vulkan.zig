@@ -31,12 +31,16 @@ pub fn init(window: *Window, allocator: Allocator) !VulkanRenderer {
         "VK_EXT_acquire_xlib_display",
     };
 
+    const xcb_exts = [_][*:0]const u8{
+        "VK_KHR_xcb_surface",
+    };
+
     const extensions = [_][*:0]const u8{
         "VK_KHR_surface",
-    } ++ switch (os_tag) {
-        .windows => win32_exts,
-        .linux => xlib_exts,
-        else => {},
+    } ++ switch (Window.system) {
+        .Win32 => win32_exts,
+        .Xlib => xlib_exts,
+        .Xcb => xcb_exts,
     };
 
     const inst_info = vk.InstanceCreateInfo{
@@ -54,22 +58,28 @@ pub fn init(window: *Window, allocator: Allocator) !VulkanRenderer {
 
     var surface: vk.SurfaceKHR = .null_handle;
 
-    switch (@import("builtin").os.tag) {
-        .windows => {
+    switch (Window.system) {
+        .Win32 => {
             const surface_info: vk.Win32SurfaceCreateInfoKHR = .{
                 .hwnd = @ptrCast(window.hwnd),
                 .hinstance = window.h_instance,
             };
             surface = try vki.createWin32SurfaceKHR(instance, &surface_info, null);
         },
-        .linux => {
+        .Xlib => {
             const surface_info: vk.XlibSurfaceCreateInfoKHR = .{
                 .window = window.w,
                 .dpy = @ptrCast(window.display),
             };
             surface = try vki.createXlibSurfaceKHR(instance, &surface_info, null);
         },
-        else => {},
+        .Xcb => {
+            const surface_info: vk.XcbSurfaceCreateInfoKHR = .{
+                .connection = @ptrCast(window.connection),
+                .window = window.window,
+            };
+            surface = try vki.createXcbSurfaceKHR(instance, &surface_info, null);
+        },
     }
 
     var physical_devices_count: u32 = 0;
@@ -85,8 +95,8 @@ pub fn init(window: *Window, allocator: Allocator) !VulkanRenderer {
     for (physical_devices, 0..) |pd, i| {
         const props = vki.getPhysicalDeviceProperties(pd);
         std.log.info("GPU{}: {s}", .{ i, props.device_name });
-        const api_version: vk.Version = @bitCast(props.api_version);
-        std.log.info("API version: {}.{}.{}.{}", .{ api_version.major, api_version.minor, api_version.patch, api_version.variant });
+        const deriver_version: vk.Version = @bitCast(props.driver_version);
+        std.log.info("driver version: {}.{}.{}.{}", .{ deriver_version.major, deriver_version.minor, deriver_version.patch, deriver_version.variant });
     }
 
     const queue_create_info: vk.DeviceQueueCreateInfo = .{
@@ -152,7 +162,7 @@ pub fn init(window: *Window, allocator: Allocator) !VulkanRenderer {
             present_mode = .immediate_khr;
     }
 
-    std.debug.assert(caps.max_image_count >= 1);
+    // std.debug.assert(caps.max_image_count >= 1);
 
     var image_count = caps.min_image_count + 1;
 
@@ -261,7 +271,7 @@ fn setImageLayout(
 }
 
 fn baseGetInstanceProcAddress(_: vk.Instance, procname: [*:0]const u8) vk.PfnVoidFunction {
-    const vk_lib = DynamicLibrary.init("vulkan-1") catch return null;
+    const vk_lib = DynamicLibrary.init("libvulkan.so") catch return null;
     return @ptrCast(vk_lib.getProcAddress(procname));
 }
 

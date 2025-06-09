@@ -102,8 +102,7 @@ pub fn init(window: *Window, allocator: Allocator) !OpenGLRenderer {
     return self;
 }
 
-pub fn deinit(self: *OpenGLRenderer, allocator: Allocator) void {
-    _ = allocator;
+pub fn deinit(self: *OpenGLRenderer) void {
     gl_lib.deinit();
     self.context.destory();
 }
@@ -121,9 +120,9 @@ pub fn presentBuffer(self: *OpenGLRenderer) void {
 pub fn loadChars(self: *OpenGLRenderer, allocator: Allocator) !void {
     const ft_library = try freetype.Library.init(allocator);
     defer ft_library.deinit();
-    // const linux_ttf = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf";
-    const win_ttf = "C:\\Users\\Panda\\Downloads\\dejavu-sans\\ttf\\DejaVuSans.ttf";
-    const font_face = try ft_library.face(win_ttf, 24);
+    const linux_ttf = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf";
+    // const win_ttf = "C:\\Users\\Panda\\Downloads\\dejavu-sans\\ttf\\DejaVuSans.ttf";
+    const font_face = try ft_library.face(linux_ttf, 24);
     defer font_face.deinit();
 
     var c: u8 = 20;

@@ -1,6 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
-const config = @import("config");
+const build_options = @import("build_options");
 
 const App = @import("App.zig");
 

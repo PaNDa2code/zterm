@@ -4,25 +4,31 @@ pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
+    const target_os = target.result.os.tag;
     const options = b.addOptions();
+    const window_system_option = b.option(WindowSystem, "window-system", "Window system or library");
+    const render_backend_option = b.option(RenderBackend, "render-backend", "Select the graphics backend to use for rendering");
 
-    const options_desc = .{
-        .{ RenderBackend, "render-backend", "Select the graphics backend to use for rendering", .Vulkan },
-    };
+    const window_system: WindowSystem = window_system_option orelse
+        switch (target_os) {
+            .windows => .Win32,
+            .linux => .Xcb, // Use xcb as defulat for now
+            else => @panic("target os not supported yet"),
+        };
 
-    inline for (@typeInfo(@TypeOf(options_desc)).@"struct".fields) |field| {
-        const T = @field(options_desc, field.name).@"0";
-        const name = @field(options_desc, field.name).@"1";
-        const description = @field(options_desc, field.name).@"2";
-        const defult_value = @field(options_desc, field.name).@"3";
-        options.addOption(T, name, b.option(T, name, description) orelse defult_value);
-    }
+    // Moving towards making vulkan the defulat renderer
+    const render_backend: RenderBackend = render_backend_option orelse .Vulkan;
 
-    const zig_openpty = b.dependency("zig_openpty", .{});
-    const openpty_mod = zig_openpty.module("openpty");
+    // Add final values to the source code exposed options
+    options.addOption(WindowSystem, "window-system", window_system);
+    options.addOption(RenderBackend, "render-backend", render_backend);
 
-    const win32 = b.dependency("zigwin32", .{});
-    const win32_mod = win32.module("win32");
+
+    const exe_mod = b.createModule(.{
+        .root_source_file = b.path("src/main.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
 
     const vtparse = b.dependency("vtparse", .{
         .target = target,
@@ -36,34 +42,54 @@ pub fn build(b: *std.Build) void {
     });
     const freetype_mod = freetype.module("zig_freetype2");
 
-    const gl_bindings = @import("zigglgen").generateBindingsModule(b, .{
-        .api = .gl,
-        .version = .@"4.0",
-        .profile = .core,
-        .extensions = &.{},
-    });
+    switch (target.result.os.tag) {
+        .windows => {
+            const win32 = b.dependency("zigwin32", .{});
+            const win32_mod = win32.module("win32");
+            exe_mod.addImport("win32", win32_mod);
+        },
+        .linux => {
+            const zig_openpty = b.dependency("zig_openpty", .{});
+            const openpty_mod = zig_openpty.module("openpty");
+            exe_mod.addImport("openpty", openpty_mod);
+        },
+        else => @panic("os not supported yet"),
+    }
 
-    const vulkan = b.dependency("vulkan", .{
-        .registry = b.dependency("vulkan_headers", .{}).path("registry/vk.xml"),
-    });
-
-    const vulkan_mod = vulkan.module("vulkan-zig");
-
-    const exe_mod = b.createModule(.{
-        .root_source_file = b.path("src/main.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-
-    exe_mod.addImport("win32", win32_mod);
-    exe_mod.addImport("openpty", openpty_mod);
     exe_mod.addImport("vtparse", vtparse_mod);
     exe_mod.addImport("freetype", freetype_mod);
-    exe_mod.addImport("gl", gl_bindings);
-    exe_mod.addImport("vulkan", vulkan_mod);
-    if (target.result.os.tag == .linux) {
-        exe_mod.linkSystemLibrary("X11", .{});
-        exe_mod.linkSystemLibrary("GL", .{});
+
+    switch (render_backend) {
+        .OpenGL => {
+            const gl_bindings = @import("zigglgen").generateBindingsModule(b, .{
+                .api = .gl,
+                .version = .@"4.0",
+                .profile = .core,
+                .extensions = &.{},
+            });
+            exe_mod.addImport("gl", gl_bindings);
+            if (target_os == .linux)
+                exe_mod.linkSystemLibrary("GLX", .{});
+        },
+        .Vulkan => {
+            const vulkan = b.dependency("vulkan", .{
+                .registry = b.dependency("vulkan_headers", .{}).path("registry/vk.xml"),
+            });
+
+            const vulkan_mod = vulkan.module("vulkan-zig");
+            exe_mod.addImport("vulkan", vulkan_mod);
+        },
+        .D3D11 => {},
+    }
+
+    switch (window_system) {
+        .Win32 => {},
+        .Xlib => {
+            exe_mod.linkSystemLibrary("X11", .{});
+        },
+        .Xcb => {
+            exe_mod.linkSystemLibrary("xcb", .{});
+        },
     }
 
     const exe = b.addExecutable(.{
@@ -73,7 +99,7 @@ pub fn build(b: *std.Build) void {
     });
 
     exe.link_gc_sections = true;
-    exe.root_module.addOptions("config", options);
+    exe.root_module.addOptions("build_options", options);
 
     b.installArtifact(exe);
 
@@ -104,4 +130,15 @@ const RenderBackend = enum {
     D3D11,
     OpenGL,
     Vulkan,
+};
+
+const WindowSystem = enum {
+    Win32,
+    Xlib,
+    Xcb,
+};
+
+const Config = struct {
+    window_system: WindowSystem,
+    render_backend: RenderBackend,
 };

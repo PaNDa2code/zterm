@@ -63,5 +63,5 @@ const VTParser = vtparse.VTParser;
 const Allocator = std.mem.Allocator;
 
 const std = @import("std");
-const config = @import("config");
+const build_options = @import("build_options");
 const vtparse = @import("vtparse");
