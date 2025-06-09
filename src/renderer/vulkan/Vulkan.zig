@@ -6,7 +6,6 @@ surface: vk.SurfaceKHR, // Window surface
 base_dispatch: vk.BaseDispatch,
 instance_dispatch: vk.InstanceDispatch,
 device_dispatch: vk.DeviceDispatch,
-vk_mem: VkMemInterface,
 window_height: u32,
 window_width: u32,
 
@@ -38,14 +37,10 @@ pub fn init(window: *Window, allocator: Allocator) !VulkanRenderer {
 
     const vkb = vk.BaseWrapper.load(baseGetInstanceProcAddress);
 
-    var vk_allocator = VkMemInterface.create(allocator);
-
-    const vk_allocation_callbacks = vk_allocator.vkAllocatorCallbacks();
-
-    const instance = try vkb.createInstance(&inst_info, &vk_allocation_callbacks);
+    const instance = try vkb.createInstance(&inst_info, null);
 
     const vki = vk.InstanceWrapper.load(instance, vkb.dispatch.vkGetInstanceProcAddr.?);
-    errdefer vki.destroyInstance(instance, &vk_allocation_callbacks);
+    errdefer vki.destroyInstance(instance, null);
 
     var surface: vk.SurfaceKHR = .null_handle;
 
@@ -55,14 +50,14 @@ pub fn init(window: *Window, allocator: Allocator) !VulkanRenderer {
                 .hwnd = @ptrCast(window.hwnd),
                 .hinstance = window.h_instance,
             };
-            surface = try vki.createWin32SurfaceKHR(instance, &surface_info, &vk_allocation_callbacks);
+            surface = try vki.createWin32SurfaceKHR(instance, &surface_info, null);
         },
         .linux => {
             const surface_info: vk.XlibSurfaceCreateInfoKHR = .{
                 .window = window.w,
                 .dpy = @ptrCast(window.display),
             };
-            surface = try vki.createXlibSurfaceKHR(instance, &surface_info, &vk_allocation_callbacks);
+            surface = try vki.createXlibSurfaceKHR(instance, &surface_info, null);
         },
         else => {},
     }
@@ -101,7 +96,7 @@ pub fn init(window: *Window, allocator: Allocator) !VulkanRenderer {
         .pp_enabled_extension_names = &ext,
     };
 
-    const device = try vki.createDevice(physical_devices[0], &device_create_info, &vk_allocation_callbacks);
+    const device = try vki.createDevice(physical_devices[0], &device_create_info, null);
 
     const vkd = vk.DeviceWrapper.load(device, vki.dispatch.vkGetDeviceProcAddr.?);
 
@@ -171,7 +166,7 @@ pub fn init(window: *Window, allocator: Allocator) !VulkanRenderer {
         .clipped = 0,
     };
 
-    const swap_chain = try vkd.createSwapchainKHR(device, &swap_chain_create_info, &vk_allocation_callbacks);
+    const swap_chain = try vkd.createSwapchainKHR(device, &swap_chain_create_info, null);
 
     return .{
         .swap_chain = swap_chain,
@@ -182,7 +177,6 @@ pub fn init(window: *Window, allocator: Allocator) !VulkanRenderer {
         .base_dispatch = vkb.dispatch,
         .instance_dispatch = vki.dispatch,
         .device_dispatch = vkd.dispatch,
-        .vk_mem = vk_allocator,
         .window_height = window.height,
         .window_width = window.width,
     };
@@ -262,17 +256,14 @@ fn baseGetInstanceProcAddress(_: vk.Instance, procname: [*:0]const u8) vk.PfnVoi
 }
 
 pub fn deinit(self: *VulkanRenderer) void {
-    const vk_mem_cb = self.vk_mem.vkAllocatorCallbacks();
-    defer self.vk_mem.destroy();
-
     const vki: vk.InstanceWrapper = .{ .dispatch = self.instance_dispatch };
     const vkd: vk.DeviceWrapper = .{ .dispatch = self.device_dispatch };
 
-    vkd.destroySwapchainKHR(self.device, self.swap_chain, &vk_mem_cb);
-    vkd.destroyDevice(self.device, &vk_mem_cb);
+    vkd.destroySwapchainKHR(self.device, self.swap_chain, null);
+    vkd.destroyDevice(self.device, null);
 
-    vki.destroySurfaceKHR(self.instance, self.surface, &vk_mem_cb);
-    vki.destroyInstance(self.instance, &vk_mem_cb);
+    vki.destroySurfaceKHR(self.instance, self.surface, null);
+    vki.destroyInstance(self.instance, null);
 }
 
 pub fn clearBuffer(self: *VulkanRenderer, color: ColorRGBA) void {

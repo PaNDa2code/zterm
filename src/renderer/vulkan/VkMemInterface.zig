@@ -11,7 +11,7 @@ const RecordMap = std.AutoHashMapUnmanaged(usize, Record);
 const VkMemInterface = @This();
 
 allocator: Allocator,
-record_map: RecordMap = .{},
+record_map: RecordMap = .empty,
 
 pub fn create(allocator: Allocator) VkMemInterface {
     return .{
@@ -146,3 +146,22 @@ fn vkRealloc(
 const std = @import("std");
 const vk = @import("vulkan");
 const Allocator = std.mem.Allocator;
+
+test {
+    var vk_allocator = VkMemInterface.create(std.testing.allocator);
+    defer vk_allocator.destroy();
+
+    const callbacks = vk_allocator.vkAllocatorCallbacks();
+
+    var size: usize = 0;
+    var rand = std.Random.DefaultPrng.init(std.testing.random_seed);
+
+    var ptrs: [1000]?*anyopaque = undefined;
+    for (0..ptrs.len) |i| {
+        size = rand.random().uintAtMost(usize, 1024 * 1024);
+        ptrs[i] = callbacks.pfn_allocation.?(callbacks.p_user_data, size, 8, .command);
+    }
+    for (ptrs) |ptr| {
+        callbacks.pfn_free.?(callbacks.p_user_data, ptr);
+    }
+}
