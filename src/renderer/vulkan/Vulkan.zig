@@ -22,11 +22,21 @@ pub fn init(window: *Window, allocator: Allocator) !VulkanRenderer {
         .engine_version = 0,
     };
 
+    const win32_exts = [_][*:0]const u8{
+        "VK_KHR_win32_surface",
+    };
+
+    const xlib_exts = [_][*:0]const u8{
+        "VK_KHR_xlib_surface",
+        "VK_EXT_acquire_xlib_display",
+    };
+
     const extensions = [_][*:0]const u8{
         "VK_KHR_surface",
-        "VK_KHR_win32_surface",
-        // "VK_KHR_xlib_surface",
-        // "VK_EXT_acquire_xlib_display",
+    } ++ switch (os_tag) {
+        .windows => win32_exts,
+        .linux => xlib_exts,
+        else => {},
     };
 
     const inst_info = vk.InstanceCreateInfo{
@@ -284,6 +294,8 @@ pub fn renaderText(self: *VulkanRenderer, buffer: []const u8, x: u32, y: u32, co
 }
 
 const std = @import("std");
+const builtin = @import("builtin");
+const os_tag = builtin.os.tag;
 const vk = @import("vulkan");
 const common = @import("../common.zig");
 const Window = @import("../../window.zig").Window;
