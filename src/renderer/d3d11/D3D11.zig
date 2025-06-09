@@ -49,7 +49,7 @@ pixel_shader_blob: *ID3DBlob = undefined,
 dxdi: if (builtin.mode == .Debug) DxgiDebugInterface else void = undefined,
 
 // TODO: Replace manual HRESULT checks with proper Zig error unions and error sets when supported.
-pub fn init(window: *Window) !D3D11Renderer {
+pub fn init(window: *Window, _: Allocator) !D3D11Renderer {
     var self: D3D11Renderer = .{};
 
     const sd = dxgi.DXGI_SWAP_CHAIN_DESC{
@@ -74,7 +74,6 @@ pub fn init(window: *Window) !D3D11Renderer {
     };
 
     var hresult: i32 = 0;
-
 
     self.dxdi = try DxgiDebugInterface.init(@ptrCast(self.device));
     self.dxdi.set();
@@ -203,6 +202,13 @@ pub fn deinit(self: *D3D11Renderer) void {
     _ = self.pixel_shader_blob.IUnknown.Release();
 }
 
+pub fn renaderText(self: *D3D11Renderer, buffer: []const u8, x: u32, y: u32, color: ColorRGBA) void {
+    _ = self;
+    _ = buffer;
+    _ = x;
+    _ = y;
+    _ = color;
+}
 pub fn clearBuffer(self: *D3D11Renderer, color: ColorRGBA) void {
     self.context.ClearRenderTargetView(self.render_target_view, &color.r);
 }
@@ -275,7 +281,7 @@ pub fn drawTestTriagnle(self: *D3D11Renderer) void {
         .TopLeftX = 0,
         .TopLeftY = 0,
     };
-    self.context.RSSetViewports(1, @ptrCast(&view_port));
+    self.context.RSSetViewports(1, &view_port);
 
     self.context.IASetInputLayout(input_layout);
 

@@ -11,7 +11,7 @@ pub fn new(allocator: Allocator) App {
     return .{
         .window = Window.new("zterm", 600, 800),
         .allocator = allocator,
-        .vt_parser = VTParser.init(vt_parse_callback),
+        .vt_parser = VTParser.init(vtParseCallback),
         .child = .{ .exe_path = if (@import("builtin").os.tag == .windows) "cmd" else "bash" },
         .pty = undefined,
         .buffer = undefined,
@@ -39,12 +39,12 @@ pub fn loop(self: *App) void {
         self.window.pumpMessages();
         self.window.renderer.clearBuffer(.Gray);
         self.window.renderer.renaderText("HelloWorld!", 10, 570, .White);
-        self.window.renderer.renaderText("PaNDa2code", 10, 540, .Green);
+        self.window.renderer.renaderText("PaNDa1code", 10, 540, .Green);
         self.window.renderer.presentBuffer();
     }
 }
 
-fn vt_parse_callback(state: *const vtparse.ParserData, to_action: vtparse.Action, char: u8) void {
+fn vtParseCallback(state: *const vtparse.ParserData, to_action: vtparse.Action, char: u8) void {
     std.log.info("{0s: <10}{1s: <13} => {2c} {2d}", .{ @tagName(state.state), @tagName(to_action), char });
 }
 
