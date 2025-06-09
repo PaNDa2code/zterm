@@ -62,55 +62,20 @@ pub fn build(b: *std.Build) void {
     // For lsp only
     const check_step = b.step("check", "for zls");
 
-    inline for (mod_options_list) |opt| {
+    const mod_options_list = std.zon.parse.fromSlice(
+        []ModuleConfig,
+        b.allocator,
+        @embedFile("check.zon"),
+        null,
+        .{},
+    ) catch unreachable;
+
+    for (mod_options_list) |opt| {
         const check_mod = exeMod(b, opt);
         const check_exe = b.addExecutable(.{ .name = "check", .root_module = check_mod });
         check_step.dependOn(&check_exe.step);
     }
 }
-
-const mod_options_list = [_]ModuleConfig{
-    .{
-        .target = .{ .string = "native-windows" },
-        .optimize = .Debug,
-        .config = .{
-            .render_backend = .D3D11,
-            .window_system = .Win32,
-        },
-    },
-    .{
-        .target = .{ .string = "native-windows" },
-        .optimize = .Debug,
-        .config = .{
-            .render_backend = .Vulkan,
-            .window_system = .Win32,
-        },
-    },
-    .{
-        .target = .{ .string = "native-windows" },
-        .optimize = .Debug,
-        .config = .{
-            .render_backend = .OpenGL,
-            .window_system = .Win32,
-        },
-    },
-    .{
-        .target = .{ .string = "native" },
-        .optimize = .Debug,
-        .config = .{
-            .render_backend = .OpenGL,
-            .window_system = .Xlib,
-        },
-    },
-    .{
-        .target = .{ .string = "native" },
-        .optimize = .Debug,
-        .config = .{
-            .render_backend = .Vulkan,
-            .window_system = .Xcb,
-        },
-    },
-};
 
 pub fn exeMod(b: *std.Build, module_config: ModuleConfig) *std.Build.Module {
     const target = if (module_config.target == .resolved) module_config.target.resolved else blk: {
