@@ -1,9 +1,9 @@
 .{
-    .name = .zterm,
+    .name = .zerotty,
 
     .version = "0.0.0",
 
-    .fingerprint = 0xf10b37e2a9e36b31,
+    .fingerprint = 0x5c682fee5d121c4c,
 
     .minimum_zig_version = "0.14.0",
 

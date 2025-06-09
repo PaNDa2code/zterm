@@ -28,7 +28,7 @@ pub fn build(b: *std.Build) void {
     });
 
     const exe = b.addExecutable(.{
-        .name = "cross_pty",
+        .name = "zerotty",
         .root_module = exe_mod,
         .linkage = if (target.result.abi == .musl) .static else .dynamic,
     });

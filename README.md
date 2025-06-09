@@ -1,8 +1,8 @@
 ---
-# Zterm - A Cross-Compiled Terminal Emulator
+# ZeroTTY - A Cross-Compiled Terminal Emulator
 
 ## Description
-Zterm is a terminal emulator project. It focuses on **cross-compilation**, **native execution**, and **low-level design** to achieve high **speed and performance** across various operating systems.
+ZeroTTY is a terminal emulator project. It focuses on **cross-compilation**, **native execution**, and **low-level design** to achieve high **speed and performance** across various operating systems.
 
 ## Technologies
 Developed primarily in **Zig**, leveraging its capabilities for cross-compilation and system-level programming.

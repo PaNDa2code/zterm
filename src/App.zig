@@ -9,7 +9,7 @@ const App = @This();
 
 pub fn new(allocator: Allocator) App {
     return .{
-        .window = Window.new("zterm", 600, 800),
+        .window = Window.new("zerotty", 600, 800),
         .allocator = allocator,
         .vt_parser = VTParser.init(vtParseCallback),
         .child = .{ .exe_path = if (@import("builtin").os.tag == .windows) "cmd" else "bash" },

@@ -13,7 +13,7 @@ const VulkanRenderer = @This();
 
 pub fn init(window: *Window, allocator: Allocator) !VulkanRenderer {
     const app_info = vk.ApplicationInfo{
-        .p_application_name = "zterm",
+        .p_application_name = "zerotty",
 
         .application_version = 0,
         .api_version = @bitCast(vk.HEADER_VERSION_COMPLETE),
