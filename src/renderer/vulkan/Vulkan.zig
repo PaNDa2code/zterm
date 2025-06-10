@@ -6,12 +6,18 @@ surface: vk.SurfaceKHR, // Window surface
 base_dispatch: vk.BaseDispatch,
 instance_dispatch: vk.InstanceDispatch,
 device_dispatch: vk.DeviceDispatch,
+vk_mem: VkMemInterface,
 window_height: u32,
 window_width: u32,
 
 const VulkanRenderer = @This();
 
 pub fn init(window: *Window, allocator: Allocator) !VulkanRenderer {
+    var vk_mem = VkMemInterface.create(allocator);
+    errdefer vk_mem.destroy();
+
+    const vk_mem_cb = vk_mem.vkAllocatorCallbacks();
+
     const app_info = vk.ApplicationInfo{
         .p_application_name = "zerotty",
 
@@ -51,10 +57,10 @@ pub fn init(window: *Window, allocator: Allocator) !VulkanRenderer {
 
     const vkb = vk.BaseWrapper.load(baseGetInstanceProcAddress);
 
-    const instance = try vkb.createInstance(&inst_info, null);
+    const instance = try vkb.createInstance(&inst_info, &vk_mem_cb);
 
     const vki = vk.InstanceWrapper.load(instance, vkb.dispatch.vkGetInstanceProcAddr.?);
-    errdefer vki.destroyInstance(instance, null);
+    errdefer vki.destroyInstance(instance, &vk_mem_cb);
 
     var surface: vk.SurfaceKHR = .null_handle;
 
@@ -64,23 +70,25 @@ pub fn init(window: *Window, allocator: Allocator) !VulkanRenderer {
                 .hwnd = @ptrCast(window.hwnd),
                 .hinstance = window.h_instance,
             };
-            surface = try vki.createWin32SurfaceKHR(instance, &surface_info, null);
+            surface = try vki.createWin32SurfaceKHR(instance, &surface_info, &vk_mem_cb);
         },
         .Xlib => {
             const surface_info: vk.XlibSurfaceCreateInfoKHR = .{
                 .window = window.w,
                 .dpy = @ptrCast(window.display),
             };
-            surface = try vki.createXlibSurfaceKHR(instance, &surface_info, null);
+            surface = try vki.createXlibSurfaceKHR(instance, &surface_info, &vk_mem_cb);
         },
         .Xcb => {
             const surface_info: vk.XcbSurfaceCreateInfoKHR = .{
                 .connection = @ptrCast(window.connection),
                 .window = window.window,
             };
-            surface = try vki.createXcbSurfaceKHR(instance, &surface_info, null);
+            surface = try vki.createXcbSurfaceKHR(instance, &surface_info, &vk_mem_cb);
         },
     }
+
+    errdefer vki.destroySurfaceKHR(instance, surface, &vk_mem_cb);
 
     var physical_devices_count: u32 = 0;
     _ = try vki.enumeratePhysicalDevices(instance, &physical_devices_count, null);
@@ -116,12 +124,23 @@ pub fn init(window: *Window, allocator: Allocator) !VulkanRenderer {
         .pp_enabled_extension_names = &ext,
     };
 
-    const device = try vki.createDevice(physical_devices[0], &device_create_info, null);
+    var physical_device: vk.PhysicalDevice = .null_handle;
+    var device: vk.Device = .null_handle;
+
+    for (physical_devices) |phs_dev| {
+        device = vki.createDevice(phs_dev, &device_create_info, &vk_mem_cb) catch continue;
+        physical_device = phs_dev;
+        break;
+    }
+
+    if (device == .null_handle)
+        return error.DeviceCreationFailed;
 
     const vkd = vk.DeviceWrapper.load(device, vki.dispatch.vkGetDeviceProcAddr.?);
+    errdefer vkd.destroyDevice(device, &vk_mem_cb);
 
     const caps: vk.SurfaceCapabilitiesKHR =
-        try vki.getPhysicalDeviceSurfaceCapabilitiesKHR(physical_devices[0], surface);
+        try vki.getPhysicalDeviceSurfaceCapabilitiesKHR(physical_device, surface);
 
     const swap_chain_extent: vk.Extent2D =
         if (caps.current_extent.width == -1 or caps.current_extent.height == -1)
@@ -135,7 +154,7 @@ pub fn init(window: *Window, allocator: Allocator) !VulkanRenderer {
     var present_modes_count: u32 = 0;
 
     _ = try vki.getPhysicalDeviceSurfacePresentModesKHR(
-        physical_devices[0],
+        physical_device,
         surface,
         &present_modes_count,
         null,
@@ -145,7 +164,7 @@ pub fn init(window: *Window, allocator: Allocator) !VulkanRenderer {
     defer allocator.free(present_modes);
 
     _ = try vki.getPhysicalDeviceSurfacePresentModesKHR(
-        physical_devices[0],
+        physical_device,
         surface,
         &present_modes_count,
         present_modes.ptr,
@@ -186,17 +205,18 @@ pub fn init(window: *Window, allocator: Allocator) !VulkanRenderer {
         .clipped = 0,
     };
 
-    const swap_chain = try vkd.createSwapchainKHR(device, &swap_chain_create_info, null);
+    const swap_chain = try vkd.createSwapchainKHR(device, &swap_chain_create_info, &vk_mem_cb);
 
     return .{
         .swap_chain = swap_chain,
         .device = device,
         .instance = instance,
-        .physical_device = physical_devices[0],
+        .physical_device = physical_device,
         .surface = surface,
         .base_dispatch = vkb.dispatch,
         .instance_dispatch = vki.dispatch,
         .device_dispatch = vkd.dispatch,
+        .vk_mem = vk_mem,
         .window_height = window.height,
         .window_width = window.width,
     };
@@ -271,19 +291,23 @@ fn setImageLayout(
 }
 
 fn baseGetInstanceProcAddress(_: vk.Instance, procname: [*:0]const u8) vk.PfnVoidFunction {
-    const vk_lib = DynamicLibrary.init("libvulkan.so") catch return null;
+    const vk_lib = DynamicLibrary.init(if (os_tag == .windows) "vulkan-1" else "libvulkan.so.1") catch return null;
     return @ptrCast(vk_lib.getProcAddress(procname));
 }
 
 pub fn deinit(self: *VulkanRenderer) void {
+    const cb = self.vk_mem.vkAllocatorCallbacks();
+
     const vki: vk.InstanceWrapper = .{ .dispatch = self.instance_dispatch };
     const vkd: vk.DeviceWrapper = .{ .dispatch = self.device_dispatch };
 
-    vkd.destroySwapchainKHR(self.device, self.swap_chain, null);
-    vkd.destroyDevice(self.device, null);
+    vkd.destroySwapchainKHR(self.device, self.swap_chain, &cb);
+    vkd.destroyDevice(self.device, &cb);
 
-    vki.destroySurfaceKHR(self.instance, self.surface, null);
-    vki.destroyInstance(self.instance, null);
+    vki.destroySurfaceKHR(self.instance, self.surface, &cb);
+    vki.destroyInstance(self.instance, &cb);
+
+    self.vk_mem.destroy();
 }
 
 pub fn clearBuffer(self: *VulkanRenderer, color: ColorRGBA) void {

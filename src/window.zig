@@ -344,7 +344,8 @@ const XcbWindow = struct {
         );
 
         // Set window title
-        const title = "My XCB Window";
+        const title = try allocator.dupeZ(u8, self.title);
+        defer allocator.free(title);
         _ = c.xcb_change_property(
             self.connection,
             c.XCB_PROP_MODE_REPLACE,
@@ -352,7 +353,7 @@ const XcbWindow = struct {
             c.XCB_ATOM_WM_NAME,
             c.XCB_ATOM_STRING,
             8,
-            title.len,
+            @intCast(title.len),
             title.ptr,
         );
 
@@ -390,5 +391,6 @@ const XcbWindow = struct {
     pub fn close(self: *Window) void {
         _ = c.xcb_destroy_window(self.connection, self.window);
         c.xcb_disconnect(self.connection);
+        self.renderer.deinit();
     }
 };
