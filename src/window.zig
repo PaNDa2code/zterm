@@ -1,10 +1,10 @@
 const std = @import("std");
-const win32 = @import("win32");
-const builtin = @import("builtin");
 const build_options = @import("build_options");
 
-const os = builtin.os.tag;
 const Allocator = std.mem.Allocator;
+
+const RendererInterface = @import("renderer/RendererInterface.zig");
+const RendererApi = @import("renderer/root.zig").RendererApi;
 
 pub const Window = switch (build_options.@"window-system") {
     .Win32 => Win32Window,
@@ -20,6 +20,7 @@ pub const WindowResizeEvent = struct {
 const Win32Window = struct {
     pub const system: build_options.@"build.WindowSystem" = .Win32;
 
+    const win32 = @import("win32");
     const win32fnd = win32.foundation;
     const win32wm = win32.ui.windows_and_messaging;
     const win32dwm = win32.graphics.dwm;
@@ -32,15 +33,13 @@ const Win32Window = struct {
     const WPARAM = win32fnd.WPARAM;
     const LPARAM = win32fnd.LPARAM;
 
-    const RendererApi = @import("renderer/root.zig").Renderer;
-
     exit: bool = false,
     hwnd: HWND = undefined,
     h_instance: HINSTANCE = undefined,
     title: []const u8,
     height: u32,
     width: u32,
-    renderer: RendererApi = undefined,
+    renderer: RendererInterface = .{},
 
     pub fn new(title: []const u8, height: u32, width: u32) Window {
         return .{
@@ -102,13 +101,13 @@ const Win32Window = struct {
 
         self.hwnd = hwnd;
 
-        self.renderer = try RendererApi.init(self, allocator);
+        try self.renderer.init(self, allocator);
 
         _ = win32wm.ShowWindow(hwnd, .{ .SHOWNORMAL = 1 });
     }
 
-    pub fn close(self: *Window) void {
-        self.renderer.deinit();
+    pub fn close(self: *Window, allocator: Allocator) void {
+        self.renderer.deinit(allocator);
     }
 
     pub fn resize(self: *Window, height: u32, width: u32) !void {
@@ -201,8 +200,6 @@ const XlibWindow = struct {
         @cInclude("X11/keysym.h");
     });
 
-    const RendererApi = @import("renderer/root.zig").Renderer;
-
     socket: i32 = undefined,
     title: []const u8,
     height: u32,
@@ -210,7 +207,7 @@ const XlibWindow = struct {
     display: *x11.Display = undefined,
     s: c_int = undefined,
     w: c_ulong = undefined,
-    renderer: RendererApi = undefined,
+    renderer: RendererInterface = .{},
 
     exit: bool = false,
     wm_delete_window: c_ulong = 0,
@@ -231,7 +228,7 @@ const XlibWindow = struct {
         self.s = screen;
 
         // x11 window is created inside opengl context creator
-        self.renderer = try RendererApi.init(self, allocator);
+        try self.renderer.init(self, allocator);
 
         const name = try std.fmt.allocPrintZ(allocator, "{s}", .{self.title});
         _ = x11.XStoreName(@ptrCast(display), self.w, name.ptr);
@@ -272,8 +269,8 @@ const XlibWindow = struct {
         }
     }
 
-    pub fn close(self: *Window) void {
-        self.renderer.deinit();
+    pub fn close(self: *Window, allocator: Allocator) void {
+        self.renderer.deinit(allocator);
         _ = x11.XDestroyWindow(@ptrCast(self.display), self.w);
         _ = x11.XCloseDisplay(@ptrCast(self.display));
     }
@@ -287,12 +284,10 @@ const XcbWindow = struct {
         @cInclude("X11/keysym.h");
     });
 
-    const RendererApi = @import("renderer/root.zig").Renderer;
-
     connection: *c.xcb_connection_t = undefined,
     screen: *c.xcb_screen_t = undefined,
     window: c.xcb_window_t = undefined,
-    renderer: RendererApi = undefined,
+    renderer: RendererInterface = .{},
 
     exit: bool = false,
     title: []const u8,
@@ -363,7 +358,7 @@ const XcbWindow = struct {
         // Flush all commands
         _ = c.xcb_flush(self.connection);
 
-        self.renderer = try RendererApi.init(self, allocator);
+        try self.renderer.init(self, allocator);
     }
 
     pub fn pumpMessages(self: *Window) void {
@@ -388,9 +383,9 @@ const XcbWindow = struct {
             std.c.free(event);
         }
     }
-    pub fn close(self: *Window) void {
+    pub fn close(self: *Window, allocator: Allocator) void {
         _ = c.xcb_destroy_window(self.connection, self.window);
         c.xcb_disconnect(self.connection);
-        self.renderer.deinit();
+        self.renderer.deinit(allocator);
     }
 };

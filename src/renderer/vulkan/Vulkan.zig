@@ -12,7 +12,7 @@ window_width: u32,
 
 const VulkanRenderer = @This();
 
-pub fn init(window: *Window, allocator: Allocator) !VulkanRenderer {
+pub fn init(window: *Window, allocator: Allocator) !*VulkanRenderer {
     var vk_mem = VkMemInterface.create(allocator);
     errdefer vk_mem.destroy();
 
@@ -207,7 +207,9 @@ pub fn init(window: *Window, allocator: Allocator) !VulkanRenderer {
 
     const swap_chain = try vkd.createSwapchainKHR(device, &swap_chain_create_info, &vk_mem_cb);
 
-    return .{
+    const renderer = try allocator.create(VulkanRenderer);
+
+    renderer.* = .{
         .swap_chain = swap_chain,
         .device = device,
         .instance = instance,
@@ -220,6 +222,8 @@ pub fn init(window: *Window, allocator: Allocator) !VulkanRenderer {
         .window_height = window.height,
         .window_width = window.width,
     };
+
+    return renderer;
 }
 
 fn setImageLayout(
@@ -295,7 +299,7 @@ fn baseGetInstanceProcAddress(_: vk.Instance, procname: [*:0]const u8) vk.PfnVoi
     return @ptrCast(vk_lib.getProcAddress(procname));
 }
 
-pub fn deinit(self: *VulkanRenderer) void {
+pub fn deinit(self: *VulkanRenderer, allocator: Allocator) void {
     const cb = self.vk_mem.vkAllocatorCallbacks();
 
     const vki: vk.InstanceWrapper = .{ .dispatch = self.instance_dispatch };
@@ -308,6 +312,7 @@ pub fn deinit(self: *VulkanRenderer) void {
     vki.destroyInstance(self.instance, &cb);
 
     self.vk_mem.destroy();
+    allocator.destroy(self);
 }
 
 pub fn clearBuffer(self: *VulkanRenderer, color: ColorRGBA) void {
@@ -327,6 +332,14 @@ pub fn renaderText(self: *VulkanRenderer, buffer: []const u8, x: u32, y: u32, co
     _ = color;
 }
 
+pub const vtable: RendererInterface.VTaple = .{
+    .init = @ptrCast(&init),
+    .deinit = @ptrCast(&deinit),
+    .clearBuffer = @ptrCast(&clearBuffer),
+    .presentBuffer = @ptrCast(&presentBuffer),
+    .renaderText = @ptrCast(&renaderText),
+};
+
 const std = @import("std");
 const builtin = @import("builtin");
 const os_tag = builtin.os.tag;
@@ -337,3 +350,4 @@ const Allocator = std.mem.Allocator;
 const ColorRGBA = common.ColorRGBA;
 const DynamicLibrary = @import("../../DynamicLibrary.zig");
 const VkMemInterface = @import("VkMemInterface.zig");
+const RendererInterface = @import("../RendererInterface.zig");

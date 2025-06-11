@@ -53,8 +53,11 @@ fn getProcTableOnce() void {
 const vertex_shader_source = @embedFile("shaders/vertex.glsl");
 const fragment_shader_source = @embedFile("shaders/fragment.glsl");
 
-pub fn init(window: *Window, allocator: Allocator) !OpenGLRenderer {
-    var self: OpenGLRenderer = undefined;
+pub fn init(window: *Window, allocator: Allocator) !*OpenGLRenderer {
+    if (Window.system == .Xcb)
+        @compileError("OpenGL is not compatable with XCB library");
+
+    const self = try allocator.create(OpenGLRenderer);
     self.context = try OpenGLContext.createOpenGLContext(window);
 
     if (!gl_proc_is_loaded)
@@ -102,9 +105,10 @@ pub fn init(window: *Window, allocator: Allocator) !OpenGLRenderer {
     return self;
 }
 
-pub fn deinit(self: *OpenGLRenderer) void {
+pub fn deinit(self: *OpenGLRenderer, allocator: Allocator) void {
     gl_lib.deinit();
     self.context.destory();
+    allocator.destroy(self);
 }
 
 pub fn clearBuffer(self: *OpenGLRenderer, color: ColorRGBA) void {
@@ -238,6 +242,14 @@ const OpenGLContext = switch (builtin.os.tag) {
     else => void,
 };
 
+pub const vtable: RendererInterface.VTaple = .{
+    .init = @ptrCast(&init),
+    .deinit = @ptrCast(&deinit),
+    .clearBuffer = @ptrCast(&clearBuffer),
+    .presentBuffer = @ptrCast(&presentBuffer),
+    .renaderText = @ptrCast(&renaderText),
+};
+
 const std = @import("std");
 const builtin = @import("builtin");
 const gl = @import("gl");
@@ -247,3 +259,4 @@ const Window = @import("../../window.zig").Window;
 const freetype = @import("freetype");
 
 const Allocator = std.mem.Allocator;
+const RendererInterface = @import("../RendererInterface.zig");

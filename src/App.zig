@@ -39,7 +39,7 @@ pub fn loop(self: *App) void {
         self.window.pumpMessages();
         self.window.renderer.clearBuffer(.Gray);
         self.window.renderer.renaderText("HelloWorld!", 10, 570, .White);
-        self.window.renderer.renaderText("PaNDa1code", 10, 540, .Green);
+        self.window.renderer.renaderText("PaNDa2code", 10, 540, .Green);
         self.window.renderer.presentBuffer();
     }
 }
@@ -49,7 +49,7 @@ fn vtParseCallback(state: *const vtparse.ParserData, to_action: vtparse.Action, 
 }
 
 pub fn exit(self: *App) void {
-    self.window.close();
+    self.window.close(self.allocator);
     self.child.terminate();
     self.buffer.deinit();
     self.pty.close();

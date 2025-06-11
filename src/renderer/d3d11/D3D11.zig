@@ -49,8 +49,8 @@ pixel_shader_blob: *ID3DBlob = undefined,
 dxdi: if (builtin.mode == .Debug) DxgiDebugInterface else void = undefined,
 
 // TODO: Replace manual HRESULT checks with proper Zig error unions and error sets when supported.
-pub fn init(window: *Window, _: Allocator) !D3D11Renderer {
-    var self: D3D11Renderer = .{};
+pub fn init(window: *Window, allocator: Allocator) !*D3D11Renderer {
+    const self = try allocator.create(D3D11Renderer);
 
     const sd = dxgi.DXGI_SWAP_CHAIN_DESC{
         .BufferDesc = .{
@@ -191,7 +191,7 @@ pub fn compileShaders(self: *D3D11Renderer) !void {
     // errdefer _ = self.vertex_shader.IUnknown.Release();
 }
 
-pub fn deinit(self: *D3D11Renderer) void {
+pub fn deinit(self: *D3D11Renderer, allocator: Allocator) void {
     _ = self.swap_chain.IUnknown.Release();
     _ = self.context.IUnknown.Release();
     _ = self.device.IUnknown.Release();
@@ -200,6 +200,7 @@ pub fn deinit(self: *D3D11Renderer) void {
     _ = self.pixel_shader.IUnknown.Release();
     _ = self.vertex_shader_blob.IUnknown.Release();
     _ = self.pixel_shader_blob.IUnknown.Release();
+    allocator.destroy(self);
 }
 
 pub fn renaderText(self: *D3D11Renderer, buffer: []const u8, x: u32, y: u32, color: ColorRGBA) void {
@@ -324,6 +325,16 @@ test "test triangle rendering" {
         renderer.presentBuffer();
     }
 }
+
+const RendererInterface = @import("../RendererInterface.zig");
+
+pub const vtable: RendererInterface.VTaple = .{
+    .init = @ptrCast(&init),
+    .deinit = @ptrCast(&deinit),
+    .clearBuffer = @ptrCast(&clearBuffer),
+    .presentBuffer = @ptrCast(&presentBuffer),
+    .renaderText = @ptrCast(&renaderText),
+};
 
 test "test glyph rendering" {
     // const allocator = std.testing.allocator;
