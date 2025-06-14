@@ -101,7 +101,7 @@ const Win32Window = struct {
 
         self.hwnd = hwnd;
 
-        try self.renderer.init(self, allocator);
+        try self.renderer.init(allocator);
 
         _ = win32wm.ShowWindow(hwnd, .{ .SHOWNORMAL = 1 });
     }
@@ -221,17 +221,14 @@ const XlibWindow = struct {
     }
 
     pub fn open(self: *Window, allocator: Allocator) !void {
-        const display = x11.XOpenDisplay(null);
-        const screen = x11.DefaultScreen(display);
-
-        self.display = display.?;
-        self.s = screen;
+        self.display = x11.XOpenDisplay(null).?;
+        self.s = x11.DefaultScreen(self.display);
 
         // x11 window is created inside opengl context creator
-        try self.renderer.init(self, allocator);
+        try self.renderer.init(allocator);
 
         const name = try std.fmt.allocPrintZ(allocator, "{s}", .{self.title});
-        _ = x11.XStoreName(@ptrCast(display), self.w, name.ptr);
+        _ = x11.XStoreName(@ptrCast(self.display), self.w, name.ptr);
         allocator.free(name);
 
         var wm_delete_window = x11.XInternAtom(@ptrCast(self.display), "WM_DELETE_WINDOW", 0);
@@ -358,7 +355,7 @@ const XcbWindow = struct {
         // Flush all commands
         _ = c.xcb_flush(self.connection);
 
-        try self.renderer.init(self, allocator);
+        try self.renderer.init(allocator);
     }
 
     pub fn pumpMessages(self: *Window) void {

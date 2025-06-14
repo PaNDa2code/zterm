@@ -15,8 +15,9 @@ pub const VTaple = struct {
     renaderText: *const fn (*anyopaque, buffer: []const u8, x: u32, y: u32, color: ColorRGBA) void,
 };
 
-pub fn init(self: *RendererInterface, window: *Window, allocator: std.mem.Allocator) !void {
+pub fn init(self: *RendererInterface, allocator: std.mem.Allocator) !void {
     @branchHint(.unlikely);
+    const window: *Window = @fieldParentPtr("renderer", self);
     self.ctx = try self.vtaple.init(window, allocator);
 }
 

@@ -1,5 +1,5 @@
-//! Allows Vulkan to use Zig's memory management via plug-in style callbacks.
-//! Provides a `VkAllocationCallbacks` using Zig's `Allocator`.
+//! Allows Vulkan to use Zig's memory management via adapter style object that
+//! can preduce `VkAllocationCallbacks` using Zig's `std.mem.Allocator`.
 
 // TODO: store allocation data without extra map
 const Record = struct {
@@ -20,17 +20,6 @@ pub fn create(allocator: Allocator) VkMemInterface {
 }
 
 pub fn destroy(self: *VkMemInterface) void {
-    // var iter = self.record_map.iterator();
-    // while (iter.next()) |entry| {
-    //     const ptr: [*]u8 = @ptrFromInt(entry.key_ptr.*);
-    //     const block = ptr[0..entry.value_ptr.size];
-    //     self.allocator.vtable.free(
-    //         self.allocator.ptr,
-    //         block,
-    //         entry.value_ptr.alignment,
-    //         @returnAddress(),
-    //     );
-    // }
     self.record_map.deinit(self.allocator);
 }
 
